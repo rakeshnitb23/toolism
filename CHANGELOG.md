@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Exact `gemini:<model>` token counts via Google's `count_tokens` API.
 - `examples/openai_startup.py`: `slim_tools` with the OpenAI SDK.
 - README: offline use of the default tokenizer, a security note on `--mcp`, a cost estimate
   in the FAQ, and a Stability section defining the public API and the deprecation policy.
