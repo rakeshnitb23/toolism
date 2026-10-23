@@ -165,23 +165,34 @@ result = toolism.slim(ts, level="safe", verify=False, tokenizer="heuristic")
 result.toolset          # slimmed ToolSet
 result.report           # SlimReport: before/after, per-rule, per-tool
 toolism.dump(result.toolset)                       # same format/envelope as the input
+toolism.dumps(result.toolset)                      # ... or as a string
+toolism.loads(text)                                # parse a JSON string
+toolism.serialize(result.toolset)                  # back to a JSON-ready document in the input's format
 toolism.slim_tools(list_of_dicts) -> list[dict]    # one-liner for agent code
+toolism.load_mcp_stdio("npx -y @scope/server")     # tools from a live stdio MCP server (extra: mcp)
 toolism.list_rules()
 ```
 
-Everything else is internal (`toolism._...` or not re-exported).
+The models (`ToolDef`, `ToolSet`, `ToolFormat`, `TokenReport`, `SlimReport`, `SlimResult`,
+`Safety`, `Rule`) and the errors (`ToolismError` and its subclasses) are public too. The full list
+is `toolism.__all__`; everything else is internal (`toolism._...` or not re-exported).
 
 ## 10. CLI
 
 ```
-toolism measure SOURCE [--tokenizer T] [--format table|json|markdown] [-o FILE]
-toolism slim    SOURCE [-o FILE] [--level safe|annotations] [--enable ID]... [--disable ID]...
+toolism measure SOURCE [--tokenizer T] [--format table|json|markdown] [--output FILE]
+toolism slim    SOURCE [--output FILE] [--level safe|annotations] [--enable ID]... [--disable ID]...
                         [--option ID.key=value]... [--verify [--verify-examples N] [--fail-on-rollback]]
-                        [--tokenizer T] [--report table|json|markdown]
+                        [--tokenizer T] [--report table|json|markdown] [--report-file FILE]
+                        [--quiet] [--compact]
 toolism check   SOURCE --baseline FILE [--max-increase 10%|500] [--max-total N] [--max-tool N]
-                        [--update-baseline] [--tokenizer T] [--summary-md FILE]
-toolism rules   [--format table|json]
+                        [--update-baseline] [--allow-tokenizer-change] [--tokenizer T]
+                        [--format table|json|markdown] [--output FILE] [--summary-md FILE]
+toolism rules   [--format table|json|markdown] [--output FILE]
 ```
+
+`measure`, `slim` and `check` also take `--mcp COMMAND` and `--mcp-timeout SECONDS` in place of
+`SOURCE`. `toolism --help` and `toolism <command> --help` are the authoritative reference.
 
 - `SOURCE` is a JSON file, `-` for stdin, or `--mcp "<command>"` for a live stdio server.
 - **Exit codes:**
@@ -218,7 +229,7 @@ See [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md) for the reasoning behind ea
 - **Fixpoint** — passes repeat until nothing changes, max 3, with a warning if the cap is hit. (R4)
 - **Tokenizer honesty** — tokenizer name and approximate flag on every report and baseline. Default overridable with `TOOLISM_TOKENIZER`. No silent fallback; exit 3. `check` rejects a tokenizer mismatch unless `--allow-tokenizer-change`. (R5, R6)
 - **Verification** — runs only on changed tools; 50 examples by default; deterministic; `skipped` is reported, never treated as a pass. (R7)
-- **Rollback** — on a counterexample, the whole tool is restored. `slim --fail-on-rollback` exits 1. This replaces the `--strict-verify` flag from section 10. (R8)
+- **Rollback** — on a counterexample, the rules that changed the tool are added back one at a time (in id order) and each result is re-verified; rules whose result has a counterexample are reverted and the rest are kept. If no single rule is found, the whole tool is restored. `slim --fail-on-rollback` exits 1. This replaces the `--strict-verify` flag from section 10. (R8)
 - **Inputs are never mutated** — asserted with `ToolDef.fingerprint()`. (R9)
 - **Round-trip** — `serialize(parse(x)) == x` for all fixtures and snapshots. (R10)
 - **Layering** — enforced by an AST import test. (R11)

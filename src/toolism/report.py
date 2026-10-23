@@ -177,7 +177,13 @@ def slim_report_to_dict(report: SlimReport) -> dict[str, Any]:
         "uncounted": list(report.uncounted),
         "warnings": list(report.warnings),
         "rollbacks": [
-            {"tool": r.tool, "rules": list(r.rules), "direction": r.direction, "example": r.example}
+            {
+                "tool": r.tool,
+                "rules": list(r.rules),
+                "reverted": list(r.reverted),
+                "direction": r.direction,
+                "example": r.example,
+            }
             for r in report.rollbacks
         ],
         "verification": [

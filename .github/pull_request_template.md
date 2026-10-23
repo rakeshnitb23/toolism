@@ -8,3 +8,4 @@
 - [ ] `uv run ruff check . && uv run mypy && uv run pytest -m "not slow"` pass
 - [ ] New or changed rule: `uv run pytest -m slow tests/test_bench.py` passes and `docs/rules.md` is regenerated
 - [ ] CHANGELOG entry under `Unreleased` for user-visible changes
+- [ ] Public API, CLI options, exit codes or Action inputs changed: old behaviour deprecated, not removed (see the Stability section in README.md)

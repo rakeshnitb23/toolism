@@ -311,21 +311,59 @@ class DropsRequired(SchemaRule):
 
 @pytest.mark.skipif(not verify_available(), reason="verify extra not installed")
 def test_verification_rolls_back_unsafe_changes() -> None:
-    from toolism.rules import get_rule
 
     ts = toolset(PYDANTIC_TOOL)
-    result = slim(ts, rules=[get_rule("SL001"), DropsRequired], tokenizer=H, verify=True)
+    result = slim(ts, rules=[DropsRequired], tokenizer=H, verify=True)
     report = result.report
     assert result.toolset.tools[0] is ts.tools[0]  # restored
     assert len(report.rollbacks) == 1
     rollback = report.rollbacks[0]
     assert rollback.tool == "search_events"
-    assert rollback.rules == ("SL001", "SL906")
+    assert rollback.rules == ("SL906",)
+    assert rollback.reverted == ("SL906",)
     assert "query" not in rollback.example
     assert report.saved == 0
     assert all(r.tokens_saved == 0 for r in report.rules)
     assert report.verification[0].verdict is Verdict.COUNTEREXAMPLE
     assert any("rolled back" in w for w in report.warnings)
+
+
+@pytest.mark.skipif(not verify_available(), reason="verify extra not installed")
+def test_verification_reverts_only_the_unsafe_rule() -> None:
+    from toolism.rules import get_rule
+
+    ts = toolset(PYDANTIC_TOOL)
+    alone = slim(ts, rules=[get_rule("SL001")], tokenizer=H, verify=True)
+    result = slim(ts, rules=[get_rule("SL001"), DropsRequired], tokenizer=H, verify=True)
+    report = result.report
+    assert result.toolset.tools[0].input_schema == alone.toolset.tools[0].input_schema
+    assert result.toolset.tools[0].input_schema["required"] == ["query"]
+    [rollback] = report.rollbacks
+    assert rollback.rules == ("SL001", "SL906")
+    assert rollback.reverted == ("SL906",)
+    assert report.saved == alone.report.saved > 0
+    stats = {r.rule_id: r for r in report.rules}
+    assert stats["SL001"].tokens_saved == alone.report.rules[0].tokens_saved
+    assert stats["SL001"].tools_changed == ("search_events",)
+    assert stats["SL906"].tokens_saved == 0
+    assert stats["SL906"].tools_changed == ()
+    assert any("reverted rules SL906" in w for w in report.warnings)
+
+
+@pytest.mark.skipif(not verify_available(), reason="verify extra not installed")
+def test_rollback_falls_back_to_the_original_when_no_culprit_is_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from toolism import pipeline
+    from toolism.rules import get_rule
+
+    monkeypatch.setattr(pipeline, "_isolate", lambda *args, **kwargs: (None, ()))
+    ts = toolset(PYDANTIC_TOOL)
+    result = slim(ts, rules=[get_rule("SL001"), DropsRequired], tokenizer=H, verify=True)
+    assert result.toolset.tools[0] is ts.tools[0]
+    [rollback] = result.report.rollbacks
+    assert rollback.reverted == ("SL001", "SL906")
+    assert result.report.saved == 0
 
 
 @pytest.mark.skipif(not verify_available(), reason="verify extra not installed")

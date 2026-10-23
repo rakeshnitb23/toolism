@@ -54,12 +54,17 @@ class ToolStat:
 
 @dataclass(frozen=True)
 class Rollback:
-    """A tool restored to its original because verification found a counterexample."""
+    """Changes undone because verification found a counterexample.
+
+    ``rules`` changed the tool; ``reverted`` are the ones whose changes were undone. The others
+    are kept when, applied without the reverted rules, verification finds no counterexample.
+    """
 
     tool: str
     rules: tuple[str, ...]
     direction: str | None
     example: Any
+    reverted: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -178,6 +183,97 @@ def _apply_reorder(
     return after
 
 
+@dataclass
+class _Applied:
+    """The outcome of running content rules to a fixpoint."""
+
+    tools: list[ToolDef]
+    deltas: dict[tuple[str, int], int]
+    touched: dict[int, list[str]]
+    passes: int
+    converged: bool
+
+
+def _apply_content(
+    original: tuple[ToolDef, ...],
+    content_rules: Sequence[type[Rule]],
+    resolved: Mapping[str, dict[str, Any]],
+    attribution: Tokenizer,
+    max_passes: int,
+) -> _Applied:
+    current = list(original)
+    deltas: dict[tuple[str, int], int] = defaultdict(int)
+    touched: dict[int, list[str]] = defaultdict(list)
+    passes = 0
+    for passes in range(1, max_passes + 1):
+        changed_in_pass = False
+        for rule_cls in content_rules:
+            inputs = tuple(_fresh(tool) for tool in current)
+            outputs = _check_content_contract(
+                rule_cls, inputs, _run_rule(rule_cls, inputs, resolved[rule_cls.id])
+            )
+            for index, (given, produced) in enumerate(zip(inputs, outputs, strict=True)):
+                if produced is given or produced.fingerprint() == current[index].fingerprint():
+                    continue
+                saved = attribution.count_tool(current[index]) - attribution.count_tool(produced)
+                deltas[(rule_cls.id, index)] += saved
+                if rule_cls.id not in touched[index]:
+                    touched[index].append(rule_cls.id)
+                current[index] = produced
+                changed_in_pass = True
+        if not changed_in_pass:
+            return _Applied(current, deltas, touched, passes, converged=True)
+    return _Applied(current, deltas, touched, passes, converged=not content_rules)
+
+
+def _isolate(
+    index: int,
+    original: tuple[ToolDef, ...],
+    content_rules: Sequence[type[Rule]],
+    suspects: Sequence[str],
+    resolved: Mapping[str, dict[str, Any]],
+    attribution: Tokenizer,
+    max_passes: int,
+    verify_examples: int,
+) -> tuple[_Applied | None, tuple[str, ...]]:
+    """Find which of ``suspects`` (rules that changed tool ``index``) make it non-equivalent.
+
+    Rules are added back one at a time, in id order; each candidate is the whole pipeline re-run
+    with the rules accepted so far plus one, so interactions between rules are verified too. A
+    rule whose candidate has a counterexample is reverted. Returns the last accepted run (``None``
+    when every suspect is reverted) and the reverted rule ids.
+    """
+    before = original[index]
+    others = [r for r in content_rules if r.id not in suspects]
+    accepted: list[type[Rule]] = []
+    kept: _Applied | None = None
+    reverted: list[str] = []
+    for rule_cls in content_rules:
+        if rule_cls.id not in suspects:
+            continue
+        trial = _apply_content(
+            original,
+            sorted([*others, *accepted, rule_cls], key=lambda r: r.id),
+            resolved,
+            attribution,
+            max_passes,
+        )
+        after = trial.tools[index]
+        if after.fingerprint() != before.fingerprint():
+            verdict = check_equivalence(
+                before.input_schema,
+                after.input_schema,
+                tool=before.name,
+                max_examples=verify_examples,
+            ).verdict
+            if verdict is Verdict.COUNTEREXAMPLE:
+                reverted.append(rule_cls.id)
+                continue
+        accepted.append(rule_cls)
+        kept = trial
+    return kept, tuple(reverted)
+
+
 def slim(
     toolset: ToolSet,
     *,
@@ -210,36 +306,19 @@ def slim(
     content_rules = [r for r in chosen if not r.reorders]
     order_rules = [r for r in chosen if r.reorders]
     original = toolset.tools
-    current = list(original)
-    deltas: dict[tuple[str, int], int] = defaultdict(int)
-    touched: dict[int, list[str]] = defaultdict(list)
+    applied = _apply_content(original, content_rules, resolved, attribution, max_passes)
+    current, deltas, touched, passes = (
+        applied.tools,
+        applied.deltas,
+        applied.touched,
+        applied.passes,
+    )
     warnings = list(toolset.warnings)
-
-    passes = 0
-    for passes in range(1, max_passes + 1):  # noqa: B007 - `passes` is reported
-        changed_in_pass = False
-        for rule_cls in content_rules:
-            inputs = tuple(_fresh(tool) for tool in current)
-            outputs = _check_content_contract(
-                rule_cls, inputs, _run_rule(rule_cls, inputs, resolved[rule_cls.id])
-            )
-            for index, (given, produced) in enumerate(zip(inputs, outputs, strict=True)):
-                if produced is given or produced.fingerprint() == current[index].fingerprint():
-                    continue
-                saved = attribution.count_tool(current[index]) - attribution.count_tool(produced)
-                deltas[(rule_cls.id, index)] += saved
-                if rule_cls.id not in touched[index]:
-                    touched[index].append(rule_cls.id)
-                current[index] = produced
-                changed_in_pass = True
-        if not changed_in_pass:
-            break
-    else:
-        if content_rules and max_passes > 1:
-            warnings.append(
-                f"rules were still changing tools after {max_passes} passes; "
-                "the result may not be minimal"
-            )
+    if not applied.converged and max_passes > 1:
+        warnings.append(
+            f"rules were still changing tools after {max_passes} passes; "
+            "the result may not be minimal"
+        )
 
     results: list[VerificationResult] = []
     rollbacks: list[Rollback] = []
@@ -254,17 +333,43 @@ def slim(
                 max_examples=verify_examples,
             )
             results.append(result)
-            if result.verdict is Verdict.COUNTEREXAMPLE:
-                rollbacks.append(
-                    Rollback(before.name, tuple(touched[index]), result.direction, result.example)
-                )
+            if result.verdict is not Verdict.COUNTEREXAMPLE:
+                continue
+            suspects = tuple(touched[index])
+            kept, reverted = _isolate(
+                index,
+                original,
+                content_rules,
+                suspects,
+                resolved,
+                attribution,
+                max_passes,
+                verify_examples,
+            )
+            if not reverted:  # isolation found no single culprit: undo every change
+                kept, reverted = None, suspects
+            rollbacks.append(
+                Rollback(before.name, suspects, result.direction, result.example, reverted)
+            )
+            for rule_id in touched.pop(index):
+                deltas.pop((rule_id, index), None)
+            if kept is None:
                 current[index] = before
-                for rule_id in touched.pop(index):
-                    deltas.pop((rule_id, index), None)
                 warnings.append(
-                    f"rolled back {before.name!r}: rules {', '.join(rollbacks[-1].rules)} "
+                    f"rolled back {before.name!r}: rules {', '.join(suspects)} "
                     f"produced a schema that is not equivalent ({result.direction})"
                 )
+                continue
+            current[index] = kept.tools[index]
+            if kept.touched.get(index):
+                touched[index] = kept.touched[index]
+            for (rule_id, i), saved in kept.deltas.items():
+                if i == index:
+                    deltas[(rule_id, index)] = saved
+            warnings.append(
+                f"reverted rules {', '.join(reverted)} on {before.name!r}: they produced a "
+                f"schema that is not equivalent ({result.direction}); kept the other changes"
+            )
 
     final = tuple(current)
     for rule_cls in order_rules:

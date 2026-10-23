@@ -9,6 +9,17 @@ All notable changes to this project are documented here. The format follows
 ### Added
 
 - Exact `gemini:<model>` token counts via Google's `count_tokens` API.
+- `examples/openai_startup.py`: `slim_tools` with the OpenAI SDK.
+- README: offline use of the default tokenizer, a security note on `--mcp`, a cost estimate
+  in the FAQ, and a Stability section defining the public API and the deprecation policy.
+- pre-commit hook `toolism-check` (`.pre-commit-hooks.yaml`), the same budget gate as
+  `toolism check`, run before each commit.
+
+### Changed
+
+- `--verify` no longer throws away every change to a tool when one rule breaks it: it finds the
+  rules responsible, reverts only those, and keeps the other rules' savings (re-verified).
+  `Rollback` gains a `reverted` field, also in the JSON report.
 
 ## [0.1.0] - 2026-10-23
 

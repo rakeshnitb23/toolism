@@ -1,0 +1,7 @@
+- id: toolism-check
+  name: toolism check
+  description: Fail when tool definitions cost more tokens than the committed baseline allows.
+  entry: toolism check
+  language: python
+  pass_filenames: false
+  files: \.json$

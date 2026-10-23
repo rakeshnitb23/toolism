@@ -24,9 +24,10 @@ def test_example_files_slim_with_savings(path: Path) -> None:
     assert not result.report.rollbacks
 
 
-def test_agent_startup_example_runs_offline() -> None:
+@pytest.mark.parametrize("script", ["agent_startup.py", "openai_startup.py"])
+def test_startup_examples_run_offline(script: str) -> None:
     out = subprocess.run(
-        [sys.executable, str(ROOT / "examples" / "agent_startup.py")],
+        [sys.executable, str(ROOT / "examples" / script)],
         check=True,
         capture_output=True,
         text=True,
@@ -46,6 +47,8 @@ def test_readme_quickstart_numbers_are_real() -> None:
     assert f"{report.total} tokens across 3 tools (average {report.total // 3})" in readme
     assert f"Slimmed 3 tools: {slim.before} → {slim.after} tokens" in readme
     assert f"baseline {slim.after}, +{slim.saved}," in readme
+    assert f"({slim.saved} tokens saved\nper request)" in readme
+    assert f"saves {slim.saved} × $3 = ${slim.saved * 3:,} a month" in readme
     for tool in report.tools:
         assert re.search(rf"│ {tool.name}\s+│\s+{tool.tokens} │", readme), tool.name
 

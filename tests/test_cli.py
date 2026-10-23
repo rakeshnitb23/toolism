@@ -153,11 +153,11 @@ def test_unavailable_tokenizer_exits_3(runner: CliRunner, monkeypatch: pytest.Mo
     from toolism.errors import TokenizerUnavailable
     from toolism.tokenizers import TiktokenTokenizer
 
-    def offline(self: Any, *args: Any, **kwargs: Any) -> Any:
+    def unavailable_load(encoding: str) -> Any:
         raise TokenizerUnavailable("cannot load o200k_base", hint="set TIKTOKEN_CACHE_DIR")
 
-    monkeypatch.setattr(TiktokenTokenizer, "count_tools", offline)
-    monkeypatch.setattr(TiktokenTokenizer, "count_tool", offline)
+    # Stub the vocabulary load so the test does not touch the network (or a warm cache).
+    monkeypatch.setattr(TiktokenTokenizer, "_load", staticmethod(unavailable_load))
     result = invoke(runner, "measure", MCP_TOOLS, "-t", "tiktoken:o200k_base")
     assert result.exit_code == 3
     assert result.stderr == "error: cannot load o200k_base\nhint: set TIKTOKEN_CACHE_DIR\n"
@@ -481,3 +481,18 @@ def test_main_switches_non_utf8_streams_to_utf8(monkeypatch: pytest.MonkeyPatch)
     assert out.encoding == "utf-8"
     out.write("— ✅ ünïcode")  # would raise UnicodeEncodeError under cp1252
     out.flush()
+
+
+def test_architecture_doc_lists_every_cli_option() -> None:
+    """docs/architecture/ARCHITECTURE.md section 10 is the CLI reference: keep it complete."""
+    import typer.main
+
+    doc = (Path(__file__).resolve().parents[1] / "docs/architecture/ARCHITECTURE.md").read_text(
+        encoding="utf-8"
+    )
+    group = typer.main.get_command(cli.app)
+    for name, command in group.commands.items():  # type: ignore[attr-defined]
+        for param in command.params:
+            for opt in param.opts:
+                if opt.startswith("--") and opt != "--help":
+                    assert opt in doc, f"toolism {name} {opt} is missing from ARCHITECTURE.md"

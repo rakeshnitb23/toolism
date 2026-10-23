@@ -130,6 +130,10 @@ Each of these makes a good first issue:
 - Use [Conventional Commits](https://www.conventionalcommits.org/): `feat(rules): …`,
   `fix(cli): …`, `docs: …`, `test: …`, `ci: …`.
 - Keep one logical change per pull request, with tests. Behaviour changes need a CHANGELOG line.
+- Changing the public API (anything in `toolism.__all__`, a CLI option, an exit code, an Action
+  input or output) follows the [stability policy](README.md#stability): add the new behaviour,
+  keep the old one working with a `DeprecationWarning` for at least one minor release, and list
+  both under `### Deprecated` in the CHANGELOG. Never reuse a rule id or make a rule less safe.
 - Never claim a saving you didn't measure: numbers in docs come from `bench/RESULTS.md`.
 
 ## Releasing (maintainers)
