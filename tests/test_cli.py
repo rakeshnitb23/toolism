@@ -149,6 +149,15 @@ def test_invalid_json_reports_position(runner: CliRunner) -> None:
     assert "invalid JSON at line 1, column 12" in result.stderr
 
 
+def test_missing_input_file_shows_hint(runner: CliRunner) -> None:
+    result = invoke(runner, "measure", "missing.json")
+    assert result.exit_code == 2
+    assert result.stderr == (
+        "error: file not found: missing.json\n"
+        "hint: check the path, or pass '-' to read from stdin (or --mcp to read from a server)\n"
+    )
+
+
 def test_unavailable_tokenizer_exits_3(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
     from toolism.errors import TokenizerUnavailable
     from toolism.tokenizers import TiktokenTokenizer

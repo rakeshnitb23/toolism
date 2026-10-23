@@ -1,0 +1,91 @@
+name: Assignment policy
+
+# Explains the issue policy in CONTRIBUTING.md ("Picking an issue") where people need it:
+# - someone asks for a good first issue or help wanted issue -> one reply with the rules
+# - a PR links a good first issue it isn't assigned to       -> one note for the maintainers
+# It never assigns, closes or labels anything; maintainers decide. The decisions live in
+# .github/scripts/assignment-policy.js (tested in CI).
+#
+# Security: pull_request_target runs with a write token, so this workflow checks out the
+# default branch only and never runs code from the pull request.
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, reopened, edited]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  issue-comment:
+    if: github.event_name == 'issue_comment' && !github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const policy = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/assignment-policy.js`);
+            const { owner, repo } = context.repo;
+            const issue = context.payload.issue;
+            const previous = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: issue.number, per_page: 100,
+            });
+            const body = policy.replyToIssueComment({
+              issue,
+              comment: context.payload.comment,
+              repoUrl: `${context.serverUrl}/${owner}/${repo}`,
+              previousBodies: previous.map((c) => c.body),
+            });
+            if (body) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body });
+            }
+
+  pull-request:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const policy = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/assignment-policy.js`);
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+            const issues = [];
+            for (const number of policy.linkedIssues(pr.body)) {
+              try {
+                const { data } = await github.rest.issues.get({ owner, repo, issue_number: number });
+                if (!data.pull_request) issues.push(data);
+              } catch (error) {
+                core.info(`#${number}: ${error.message}`);
+              }
+            }
+            if (issues.length === 0) return;
+            const search = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${owner}/${repo} is:pr is:merged author:${pr.user.login}`,
+              per_page: 1,
+            });
+            const previous = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: pr.number, per_page: 100,
+            });
+            const body = policy.reviewPullRequest({
+              pr,
+              issues,
+              mergedCount: search.data.total_count,
+              repoUrl: `${context.serverUrl}/${owner}/${repo}`,
+              previousBodies: previous.map((c) => c.body),
+            });
+            if (body) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body });
+            }

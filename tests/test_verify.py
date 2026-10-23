@@ -186,3 +186,26 @@ def test_missing_extra_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(MissingExtraError) as info:
         check_equivalence({"type": "string"}, {"type": "integer"})
     assert info.value.extra == "verify"
+
+
+def test_inputs_are_never_mutated() -> None:
+    """hypothesis-jsonschema resolves $refs in place; check_equivalence must work on copies."""
+    import copy
+
+    shared = {"type": "object", "properties": {"n": {"type": "string"}}}
+    original = {
+        "type": "object",
+        "title": "Tool",
+        "properties": {
+            "a": {"type": "array", "items": {"$ref": "#/$defs/X"}},
+            "b": {"$ref": "#/$defs/X"},
+        },
+        "$defs": {"X": shared},
+    }
+    slim = copy.deepcopy(original)
+    del slim["title"]
+    slim["properties"]["a"]["minItems"] = 0  # not annotation-only: forces sampling
+    before = copy.deepcopy((original, slim))
+    result = check_equivalence(original, slim, max_examples=10)
+    assert result.method == "sampled"
+    assert (original, slim) == before

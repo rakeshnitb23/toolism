@@ -10,16 +10,26 @@ from toolism.schema import SchemaPath
 
 _OVERLAPPING = {frozenset({"integer", "number"})}
 
+# Keywords that only ever constrain strings, so they mean the same on a merged node.
+_STRING_ONLY = frozenset({"format", "pattern", "minLength", "maxLength"})
 
-def _branch_types(branch: Any) -> list[str] | None:
-    """Types of a branch that is exactly ``{"type": ...}``, else ``None``."""
-    if not isinstance(branch, dict) or set(branch) != {"type"}:
+
+def _branch(branch: Any) -> tuple[list[str], dict[str, Any]] | None:
+    """``(types, hoistable)`` of a ``{"type": ...}`` branch, else ``None``.
+
+    ``hoistable`` holds the string-only keywords of a ``{"type": "string", ...}`` branch. A
+    branch with any other keyword (or string-only keywords on a non-string type) is rejected.
+    """
+    if not isinstance(branch, dict) or "type" not in branch:
         return None
     value = branch["type"]
     types = [value] if isinstance(value, str) else value
     if not isinstance(types, list) or not types or not all(isinstance(t, str) for t in types):
         return None
-    return types
+    extras = {k: v for k, v in branch.items() if k != "type"}
+    if extras and (value != "string" or not extras.keys() <= _STRING_ONLY):
+        return None
+    return types, extras
 
 
 def _overlap(a: list[str], b: list[str]) -> bool:
@@ -31,7 +41,13 @@ class NullableAnyOf(SchemaRule):
     """``Optional[X]`` in Pydantic becomes ``anyOf`` of two one-keyword branches. A ``type`` array
     accepts exactly the same instances and is shorter. For ``oneOf`` the rewrite is only equivalent
     when no instance can match two branches, so overlapping types (``integer``/``number``) are left
-    alone. Note: rewriting to plain ``X`` would reject an explicit ``null`` — never do that."""
+    alone. Note: rewriting to plain ``X`` would reject an explicit ``null`` — never do that.
+
+    ``date | None`` arrives as ``anyOf: [{type: string, format: date}, {type: null}]``. The
+    string-only keywords ``format``, ``pattern``, ``minLength`` and ``maxLength`` are hoisted onto
+    the merged node, which is equivalent only when exactly one branch is ``type: string`` and no
+    other branch can be a string. If the node already carries one of those keywords, or a branch
+    has any other keyword, the node is left alone."""
 
     id = "SL002"
     name = "nullable-anyof"
@@ -46,13 +62,23 @@ class NullableAnyOf(SchemaRule):
         if not isinstance(branches, list) or not branches:
             return node
         per_branch: list[list[str]] = []
+        hoisted: dict[str, Any] = {}
         for branch in branches:
-            types = _branch_types(branch)
-            if types is None:
+            parsed = _branch(branch)
+            if parsed is None:
                 return node
+            types, extras = parsed
             if key == "oneOf" and any(_overlap(types, seen) for seen in per_branch):
                 return node
             per_branch.append(types)
+            if extras:
+                if hoisted:  # a second constrained string branch can never be merged
+                    return node
+                hoisted = extras
+        if hoisted and (
+            sum("string" in types for types in per_branch) != 1 or hoisted.keys() & node.keys()
+        ):
+            return node
         merged: list[str] = []
         for types in per_branch:
             merged.extend(t for t in types if t not in merged)
@@ -60,6 +86,7 @@ class NullableAnyOf(SchemaRule):
         for name, value in node.items():
             if name == key:
                 rewritten["type"] = merged[0] if len(merged) == 1 else merged
+                rewritten.update(hoisted)
             else:
                 rewritten[name] = value
         return rewritten

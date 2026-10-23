@@ -55,7 +55,7 @@ goes to stderr:
 
 ```console
 $ toolism slim examples/mcp_tools.json -o tools.slim.json
-Slimmed 3 tools: 708 → 463 tokens (−245, −34.6%) — tiktoken:o200k_base (approximate), level safe
+Slimmed 3 tools: 708 → 457 tokens (−251, −34.6%) — tiktoken:o200k_base (approximate), level safe
 Savings by rule
 ┏━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┓
 ┃ Rule  ┃ Name                   ┃ Tokens ┃ Tools ┃
@@ -82,12 +82,12 @@ at servers you would run anyway. See [SECURITY.md](SECURITY.md).
 
 ```console
 $ toolism check tools.json -b .toolism/baseline.json --update-baseline   # once, then commit it
-Wrote .toolism/baseline.json: 463 tokens across 3 tools (tiktoken:o200k_base).
+Wrote .toolism/baseline.json: 457 tokens across 3 tools (tiktoken:o200k_base).
 
 $ toolism check tools.json -b .toolism/baseline.json --max-increase 5%   # in CI
 toolism check FAILED
-Total: 708 tokens across 3 tools (baseline 463, +245, +52.9%) — tiktoken:o200k_base (approximate)
-  ✗ total grew by 245 tokens (+52.9%), over the allowed 5%
+Total: 708 tokens across 3 tools (baseline 457, +251, +54.9%) — tiktoken:o200k_base (approximate)
+  ✗ total grew by 251 tokens (+54.9%), over the allowed 5%
 Changed tools
 ┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━┳━━━━━━━━┓
 ┃ Tool            ┃ Baseline ┃ Now ┃ Change ┃
@@ -195,6 +195,9 @@ behaviour has been deprecated with a warning for at least one minor release, and
 is listed in the [CHANGELOG](CHANGELOG.md). Patch releases never change it. Rule ids are never
 reused, and a rule's safety level never becomes less safe.
 
+To print the before/after token saving for a file of tools (offline, heuristic
+tokenizer), see [examples/measure_savings.py](examples/measure_savings.py).
+
 ## GitHub Action
 
 ```yaml
@@ -272,9 +275,9 @@ the tokenizer and say whether the count is approximate. Set a default with `TOOL
 ## FAQ
 
 **How much money does this save?** Tokens saved per request × requests ÷ 1,000,000 × your
-model's input price per million tokens. For the three tools in the tour above (245 tokens saved
+model's input price per million tokens. For the three tools in the tour above (251 tokens saved
 per request), an agent making 1M requests a month on a model priced at, say, $3 per million input
-tokens saves 245 × $3 = $735 a month. Use `-t anthropic:<model>` for exact Claude counts, and
+tokens saves 251 × $3 = $753 a month. Use `-t anthropic:<model>` for exact Claude counts, and
 check your provider's current prices.
 
 **Doesn't prompt caching make this pointless?** No, it makes it cheaper. Cached tokens still fill

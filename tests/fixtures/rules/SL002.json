@@ -20,8 +20,59 @@
     "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"oneOf": [{"type": "integer"}, {"type": "number"}]}}, "required": ["x"]}}
   },
   {
-    "name": "branch with other keywords is kept",
-    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"anyOf": [{"type": "string", "maxLength": 3}, {"type": "null"}]}}}}
+    "name": "date | None hoists format",
+    "tool": {"name": "t", "schema": {
+      "type": "object",
+      "properties": {"since": {"description": "Start date", "anyOf": [{"type": "string", "format": "date"}, {"type": "null"}], "default": null}}
+    }},
+    "expected_schema": {
+      "type": "object",
+      "properties": {"since": {"description": "Start date", "type": ["string", "null"], "format": "date", "default": null}}
+    }
+  },
+  {
+    "name": "pattern and length limits are hoisted",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {
+      "code": {"anyOf": [{"type": "string", "pattern": "^[A-Z]{3}$"}, {"type": "null"}]},
+      "name": {"oneOf": [{"type": "string", "minLength": 1, "maxLength": 3}, {"type": "null"}]}
+    }, "required": ["code", "name"]}},
+    "expected_schema": {"type": "object", "properties": {
+      "code": {"type": ["string", "null"], "pattern": "^[A-Z]{3}$"},
+      "name": {"type": ["string", "null"], "minLength": 1, "maxLength": 3}
+    }, "required": ["code", "name"]}
+  },
+  {
+    "name": "hoisting keeps sibling keywords of the node",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"minLength": 2, "anyOf": [{"type": "string", "maxLength": 5}, {"type": "null"}]}}}},
+    "expected_schema": {"type": "object", "properties": {"x": {"minLength": 2, "type": ["string", "null"], "maxLength": 5}}}
+  },
+  {
+    "name": "node already has the same keyword is kept",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"format": "email", "anyOf": [{"type": "string", "format": "date"}, {"type": "null"}]}}}}
+  },
+  {
+    "name": "other keyword on a string branch is kept",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"anyOf": [{"type": "string", "enum": ["a", "b"]}, {"type": "null"}]}}}}
+  },
+  {
+    "name": "string-only keyword mixed with another keyword is kept",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"anyOf": [{"type": "string", "format": "date", "description": "d"}, {"type": "null"}]}}}}
+  },
+  {
+    "name": "format on a non-string branch is kept",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"anyOf": [{"type": "integer", "format": "int32"}, {"type": "null"}]}}}}
+  },
+  {
+    "name": "another branch that can be a string is kept",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"anyOf": [{"type": "string", "format": "date"}, {"type": ["string", "null"]}]}}}}
+  },
+  {
+    "name": "two constrained string branches are kept",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"anyOf": [{"type": "string", "maxLength": 3}, {"type": "string", "pattern": "^a"}, {"type": "null"}]}}}}
+  },
+  {
+    "name": "oneOf overlap is still kept next to a hoistable branch",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"oneOf": [{"type": "string", "maxLength": 3}, {"type": "integer"}, {"type": "number"}]}}}}
   },
   {
     "name": "ref branch is kept",

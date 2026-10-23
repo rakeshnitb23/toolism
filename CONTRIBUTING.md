@@ -7,6 +7,25 @@ wrong.
 This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By taking
 part, you agree to uphold it.
 
+## Picking an issue
+
+Issues come in two kinds, and they work differently:
+
+| Label | Who can take it | How |
+| --- | --- | --- |
+| [good first issue](https://github.com/rakeshnitb23/toolism/labels/good%20first%20issue) | People new to toolism (fewer than 2 merged PRs here) | Comment to ask, then **wait until a maintainer assigns it to you** before opening a PR |
+| [help wanted](https://github.com/rakeshnitb23/toolism/labels/help%20wanted) | Anyone | No assignment needed: comment with your plan, then open a draft PR early |
+
+- **One good first issue per person at a time.** Finish or drop it before asking for another.
+- **First to ask, first assigned.** If several people ask for the same good first issue, it
+  usually goes to whoever asked first.
+- **PRs for a good first issue that isn't assigned to you will be closed**, so that newcomers who
+  asked and waited aren't overtaken.
+- **Stuck or busy?** Say so on the issue; that's fine. If an assigned issue has no activity for
+  7 days, a maintainer may reassign it.
+- A bot replies with these rules when you ask, and notes it on a PR that links an issue it isn't
+  assigned to. It never closes anything itself; maintainers decide.
+
 ## Development setup
 
 You need [uv](https://docs.astral.sh/uv/) and Python 3.10+.
@@ -114,7 +133,6 @@ Each of these makes a good first issue:
   `{type: [string, null], format: date}`, because `format`, `pattern`, `minLength` and
   `maxLength` only constrain strings. The Python SDK emits this for every `date | None`.
 - **Single-branch `allOf`.** `allOf: [X]` → `X`, when the sibling keywords don't conflict.
-- **SL103 `drop-titles` (lossy).** Drop every `title`, not just redundant ones.
 - **SL104 `dedupe-descriptions` (lossy).** Drop property descriptions repeated verbatim in the
   tool description.
 - **Gemini tokenizer.** `gemini:<model>` using the `count_tokens` API, mirroring
