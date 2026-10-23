@@ -70,7 +70,7 @@ runs:
         python-version: ${{ inputs.python-version }}
 
     - name: Cache tiktoken vocabulary
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ~/.cache/toolism-tiktoken
         key: toolism-tiktoken-${{ runner.os }}-v1

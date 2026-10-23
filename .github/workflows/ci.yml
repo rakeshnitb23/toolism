@@ -61,7 +61,7 @@ jobs:
           python-version: ${{ matrix.python }}
           enable-cache: true
       - name: Cache tiktoken vocabulary
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ env.TIKTOKEN_CACHE_DIR }}
           key: tiktoken-${{ runner.os }}-v1
