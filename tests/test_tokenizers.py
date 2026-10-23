@@ -244,7 +244,8 @@ def test_get_tokenizer_gemini(monkeypatch: Any) -> None:
     tok = get_tokenizer("gemini:gemini-test")
     assert isinstance(tok, GeminiTokenizer)
     assert tok.name == "gemini:gemini-test"
-    assert not tok.local and not tok.approximate
+    assert not tok.local
+    assert not tok.approximate
     assert tok.count_tools([TOOL, ToolDef(name="opaque", opaque=True)]) == 17
     assert calls[0]["model"] == "gemini-test"
     assert calls[0]["contents"] == "."
