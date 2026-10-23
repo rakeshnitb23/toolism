@@ -77,6 +77,12 @@ $ toolism measure --mcp "npx -y @modelcontextprotocol/server-github"
 `--mcp` runs that command exactly as your shell would, with your environment, so only point it
 at servers you would run anyway. See [SECURITY.md](SECURITY.md).
 
+For a server or agent with many tools, pass `--top N` to see more (or fewer) than the default 25 tools (`--top 0` shows every tool):
+
+```console
+$ toolism measure --mcp "npx -y @modelcontextprotocol/server-github" --top 5
+```
+
 **Gate** it in CI against a committed baseline:
 
 ```console

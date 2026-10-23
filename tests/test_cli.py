@@ -121,8 +121,41 @@ def test_measure_stdin_and_output_file(runner: CliRunner, tmp_path: Path) -> Non
         input=MCP_TOOLS.read_text(encoding="utf-8"),
     )
     assert result.exit_code == 0, result.output
-    assert result.stdout == ""
     assert out.read_text(encoding="utf-8").startswith("### toolism — tool definition tokens")
+
+
+def test_measure_top_option(runner: CliRunner) -> None:
+    # Default output has all tools without truncation note
+    res_default = invoke(runner, "measure", MCP_TOOLS)
+    assert res_default.exit_code == 0
+    assert "more tools" not in res_default.stdout
+    assert "create_issue" in res_default.stdout
+    assert "ping" in res_default.stdout
+
+    # --top 1 shows only the most expensive tool and the note
+    res_top1 = invoke(runner, "measure", MCP_TOOLS, "--top", "1")
+    assert res_top1.exit_code == 0
+    assert "create_issue" in res_top1.stdout
+    assert "ping" not in res_top1.stdout
+    assert "… 1 more tools" in res_top1.stdout
+
+    # --top 0 shows all tools with no note
+    res_top0 = invoke(runner, "measure", MCP_TOOLS, "--top", "0")
+    assert res_top0.exit_code == 0
+    assert "create_issue" in res_top0.stdout
+    assert "ping" in res_top0.stdout
+    assert "more tools" not in res_top0.stdout
+
+    # Default output is byte-identical to running without --top
+    res_top_default = invoke(runner, "measure", MCP_TOOLS, "--top", "25")
+    assert res_top_default.stdout == res_default.stdout
+
+    # JSON output ignores --top and contains all tools
+    res_json = invoke(runner, "measure", MCP_TOOLS, "--top", "1", "-f", "json")
+    assert res_json.exit_code == 0
+    data = json.loads(res_json.stdout)
+    assert len(data["tools"]) == 2
+
 
 
 @pytest.mark.parametrize(

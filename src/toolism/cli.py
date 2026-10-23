@@ -196,6 +196,15 @@ OutputOpt = Annotated[
     Path | None,
     typer.Option("--output", "-o", metavar="FILE", help="Write here instead of stdout."),
 ]
+TopOpt = Annotated[
+    int,
+    typer.Option(
+        "--top",
+        metavar="N",
+        min=0,
+        help="Show the N most expensive tools (0 shows all; ignored for JSON).",
+    ),
+]
 
 
 @app.callback()
@@ -227,6 +236,7 @@ def measure(
     fmt: Annotated[
         OutputFormat, typer.Option("--format", "-f", help="Report format.")
     ] = OutputFormat.table,
+    top: TopOpt = 25,
     output: OutputOpt = None,
 ) -> None:
     """Count the tokens each tool definition costs."""
@@ -236,7 +246,7 @@ def measure(
     toolset = _load(source, mcp, mcp_timeout)
     report = measure_toolset(toolset, tokenizer)
     width, color = _style(sys.stdout) if output is None else (DEFAULT_WIDTH, False)
-    _emit(render_token_report(report, fmt.value, width=width, color=color), output)
+    _emit(render_token_report(report, fmt.value, width=width, color=color, top=top), output)
 
 
 @app.command()

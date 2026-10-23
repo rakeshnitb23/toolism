@@ -180,7 +180,7 @@ is `toolism.__all__`; everything else is internal (`toolism._...` or not re-expo
 ## 10. CLI
 
 ```
-toolism measure SOURCE [--tokenizer T] [--format table|json|markdown] [--output FILE]
+toolism measure SOURCE [--top N] [--tokenizer T] [--format table|json|markdown] [--output FILE]
 toolism slim    SOURCE [--output FILE] [--level safe|annotations] [--enable ID]... [--disable ID]...
                         [--option ID.key=value]... [--verify [--verify-examples N] [--fail-on-rollback]]
                         [--tokenizer T] [--report table|json|markdown] [--report-file FILE]

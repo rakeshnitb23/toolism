@@ -92,12 +92,27 @@ def token_report_to_dict(report: TokenReport) -> dict[str, Any]:
 
 
 def render_token_report(
-    report: TokenReport, fmt: Format = "table", *, width: int = 100, color: bool = False
+    report: TokenReport,
+    fmt: Format = "table",
+    *,
+    width: int = 100,
+    color: bool = False,
+    top: int | None = None,
+    limit: int | None = None,
 ) -> str:
     if fmt == "json":
         return json.dumps(token_report_to_dict(report), indent=2, ensure_ascii=False) + "\n"
+    if limit is not None:
+        effective_top = limit
+    elif top is not None:
+        effective_top = top
+    else:
+        effective_top = TOP_N
     ranked = sorted(report.tools, key=lambda t: (-t.tokens, t.name))
-    shown, hidden = ranked[:TOP_N], ranked[TOP_N:]
+    if effective_top == 0:
+        shown, hidden = ranked, []
+    else:
+        shown, hidden = ranked[:effective_top], ranked[effective_top:]
     summary = (
         f"{_n(report.total)} tokens across {report.tool_count} tools "
         f"(average {report.average:,.0f}) — {_tokenizer_note(report.tokenizer, report.approximate)}"
