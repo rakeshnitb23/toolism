@@ -1,0 +1,55 @@
+[
+  {
+    "name": "titles are removed from the root and nested schemas",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "title": "SearchArguments",
+        "type": "object",
+        "properties": {
+          "q": {"title": "Query", "type": "string"},
+          "filters": {
+            "title": "Filters",
+            "type": "object",
+            "properties": {"kind": {"title": "Kind", "type": "string"}}
+          }
+        }
+      }
+    },
+    "expected_schema": {
+      "type": "object",
+      "properties": {
+        "q": {"type": "string"},
+        "filters": {
+          "type": "object",
+          "properties": {"kind": {"type": "string"}}
+        }
+      }
+    }
+  },
+  {
+    "name": "a property named title is kept",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "title": {"title": "Document title", "type": "string"}
+        }
+      }
+    },
+    "expected_schema": {
+      "type": "object",
+      "properties": {
+        "title": {"type": "string"}
+      }
+    }
+  },
+  {
+    "name": "schemas without titles are unchanged",
+    "tool": {
+      "name": "t",
+      "schema": {"type": "object", "properties": {"q": {"type": "string"}}}
+    }
+  }
+]

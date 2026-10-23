@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `SL103 drop-titles`: lossy annotation rule that removes every `title` keyword (opt-in via `--level annotations`).
+
 ## [0.1.0] - 2026-10-23
 
 ### Added
