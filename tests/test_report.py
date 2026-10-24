@@ -58,7 +58,18 @@ def test_measure_counts_function_tools() -> None:
 def test_empty_measure() -> None:
     report = measure(parse([]), H)
     assert (report.total, report.tool_count, report.average) == (0, 0, 0.0)
-    assert "0 tokens across 0 tools" in render_token_report(report)
+    rendered = render_token_report(report)
+    assert "No tools found in this input." in rendered
+    assert "0 tokens across 0 tools" in rendered
+    # No empty table
+    assert "Tool" not in rendered or "┏" not in rendered
+    md = render_token_report(report, "markdown")
+    assert "No tools found in this input." in md
+    assert "| Tool |" not in md
+    # JSON unchanged
+    data = json.loads(render_token_report(report, "json"))
+    assert data["tool_count"] == 0
+    assert data["tools"] == []
 
 
 def test_token_report_dict_and_json() -> None:

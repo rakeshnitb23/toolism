@@ -101,6 +101,16 @@ def render_token_report(
 ) -> str:
     if fmt == "json":
         return json.dumps(token_report_to_dict(report), indent=2, ensure_ascii=False) + "\n"
+    if report.tool_count == 0:
+        note = "No tools found in this input."
+        summary = (
+            f"{_n(report.total)} tokens across {report.tool_count} tools "
+            f"(average {report.average:,.0f}) — "
+            f"{_tokenizer_note(report.tokenizer, report.approximate)}"
+        )
+        if fmt == "markdown":
+            return f"### toolism — tool definition tokens\n\n{note}\n\n{summary}\n"
+        return _console_render([Text(note), Text(summary)], width, color)
     ranked = sorted(report.tools, key=lambda t: (-t.tokens, t.name))
     shown, hidden = ranked[:TOP_N], ranked[TOP_N:]
     summary = (
@@ -212,6 +222,16 @@ def render_slim_report(
             json.dumps(slim_report_to_dict(report), indent=2, ensure_ascii=False, default=str)
             + "\n"
         )
+    if report.tool_count == 0:
+        note = "No tools found in this input."
+        headline = (
+            f"Slimmed {report.tool_count} tools: {_n(report.before)} → {_n(report.after)} tokens "
+            f"({_signed(report.saved)}, −{report.saved_pct:.1f}%) — "
+            f"{_tokenizer_note(report.tokenizer, report.approximate)}, level {report.level}"
+        )
+        if fmt == "markdown":
+            return f"### toolism — slim report\n\n{note}\n\n{headline}\n"
+        return _console_render([Text(note), Text(headline)], width, color)
     headline = (
         f"Slimmed {report.tool_count} tools: {_n(report.before)} → {_n(report.after)} tokens "
         f"({_signed(report.saved)}, −{report.saved_pct:.1f}%) — "

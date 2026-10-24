@@ -100,6 +100,37 @@ def test_measure_table(runner: CliRunner) -> None:
     assert result.stderr == ""
 
 
+
+def test_measure_empty_input(runner: CliRunner, tmp_path: Path) -> None:
+    """Empty list and empty tools object should note that no tools were found."""
+    for content in ("[]", '{"tools": []}'):
+        path = tmp_path / "empty.json"
+        path.write_text(content, encoding="utf-8")
+        result = invoke(runner, "measure", path)
+        assert result.exit_code == 0, result.stderr
+        assert "No tools found in this input." in result.stdout
+        assert "0 tokens across 0 tools" in result.stdout
+        # JSON still valid
+        result_json = invoke(runner, "measure", path, "--format", "json")
+        assert result_json.exit_code == 0
+        data = json.loads(result_json.stdout)
+        assert data["tool_count"] == 0
+
+
+def test_slim_empty_input_report(runner: CliRunner, tmp_path: Path) -> None:
+    """Slim's stderr report should also note an empty tool list."""
+    path = tmp_path / "empty.json"
+    path.write_text("[]", encoding="utf-8")
+    result = invoke(runner, "slim", path, "--report", "table")
+    assert result.exit_code == 0
+    assert "No tools found in this input." in result.stderr
+    # JSON report unchanged in structure
+    result_json = invoke(runner, "slim", path, "--report", "json")
+    assert result_json.exit_code == 0
+    # The slimmed output is on stdout, report on stderr
+    data = json.loads(result_json.stderr)
+    assert data["tool_count"] == 0
+
 def test_measure_json_and_tokenizer_flag(runner: CliRunner) -> None:
     result = invoke(runner, "measure", MCP_TOOLS, "-f", "json", "-t", "heuristic")
     data = json.loads(result.stdout)
