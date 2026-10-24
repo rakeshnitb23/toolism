@@ -1,5 +1,9 @@
 blank_issues_enabled: true
 contact_links:
+  - name: Question or idea
+    url: https://github.com/rakeshnitb23/toolism/discussions
+    about: Ask a question or share an idea in Discussions.
+
   - name: Security vulnerability
     url: https://github.com/rakeshnitb23/toolism/security/advisories/new
     about: Please report security issues privately.
