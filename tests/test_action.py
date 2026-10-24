@@ -138,3 +138,20 @@ def test_action_yml_passes_every_input_through_env() -> None:
     run_scripts = re.findall(r"run: \|\n((?:        .*\n?)+)", text)
     assert run_scripts
     assert all("inputs." not in script for script in run_scripts)
+
+
+def test_readme_documents_every_action_input_and_output() -> None:
+    """action.yml inputs and outputs must be documented in README.md."""
+    text = (ROOT / "action.yml").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    inputs_block = text.split("\ninputs:\n", 1)[1].split("\noutputs:\n", 1)[0]
+    input_names = re.findall(r"^  ([a-z-]+):$", inputs_block, flags=re.M)
+    assert input_names
+    for name in input_names:
+        assert f"`{name}`" in readme, f"Action input '{name}' missing from README.md"
+    outputs_block = text.split("\noutputs:\n", 1)[1].split("\nruns:\n", 1)[0]
+    output_names = re.findall(r"^  ([a-z-]+):$", outputs_block, flags=re.M)
+    assert output_names
+    for name in output_names:
+        assert f"`{name}`" in readme, f"Action output '{name}' missing from README.md"
+

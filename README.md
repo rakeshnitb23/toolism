@@ -225,6 +225,31 @@ The result is added to the job summary. Outputs: `status` (`pass`/`fail`/`error`
           path: ${{ steps.toolism.outputs.summary-file }}
 ```
 
+### Action inputs
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `source` | `""` | Path to a tool definitions JSON file (OpenAI, Anthropic or MCP). Use this or `mcp`. |
+| `mcp` | `""` | Command that starts a stdio MCP server, e.g. `npx -y @scope/server`. Use this or `source`. |
+| `baseline` | `.toolism/baseline.json` | Committed baseline file. Create it with `toolism check SOURCE -b FILE --update-baseline`. |
+| `max-increase` | `""` | Allowed growth over the baseline, `10%` and/or `500` (tokens; both = larger allowance). Default no growth. |
+| `max-total` | `""` | Fail if the total tokens are above this. |
+| `max-tool` | `""` | Fail if any single tool costs more tokens than this. |
+| `tokenizer` | `tiktoken:o200k_base` | `heuristic`, `tiktoken:<encoding>` or `anthropic:<model>`. Must match the baseline. |
+| `update-baseline` | `"false"` | Write the baseline instead of checking (`true`/`false`). |
+| `allow-tokenizer-change` | `"false"` | Don't fail when the baseline was measured with another tokenizer. |
+| `python-version` | `"3.12"` | Python used to run toolism. |
+
+### Action outputs
+
+| Output | Description |
+| --- | --- |
+| `status` | `pass`, `fail` or `error`. |
+| `total` | Total tool definition tokens now. |
+| `delta` | Change against the baseline in tokens (empty without a baseline). |
+| `summary-file` | Path to a Markdown summary, ready for `$GITHUB_STEP_SUMMARY`. |
+
+
 ### pre-commit
 
 The same gate runs locally before each commit with [pre-commit](https://pre-commit.com):
