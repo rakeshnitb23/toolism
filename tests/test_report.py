@@ -85,6 +85,21 @@ def test_token_report_table_and_markdown() -> None:
     assert "| Tool | Tokens | % of total |" in md
 
 
+@pytest.mark.parametrize("fmt", ["table", "markdown", "json"])
+def test_measure_duplicate_name_warning_is_rendered_in_every_format(fmt: str) -> None:
+    duplicate = {"name": "same", "input_schema": {"type": "object"}}
+    toolset = parse([duplicate, duplicate])
+    report = measure(toolset, H)
+
+    warning = "duplicate tool name 'same' (2 times)"
+    assert report.warnings == (warning,)
+    rendered = render_token_report(report, fmt)  # type: ignore[arg-type]
+    if fmt == "json":
+        assert json.loads(rendered)["warnings"] == [warning]
+    else:
+        assert f"Warning: {warning}" in rendered
+
+
 def test_token_report_truncates_long_tables() -> None:
     report = TokenReport(
         tokenizer="heuristic",

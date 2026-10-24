@@ -18,8 +18,10 @@ annotations and run with `--level annotations`. Turn any rule on or off with `--
 | [`SL007`](#sl007-stable-order) | stable-order | safe | `--enable SL007` |
 | [`SL008`](#sl008-noop-keywords) | noop-keywords | safe | default |
 | [`SL009`](#sl009-schema-uri) | schema-uri | safe | default |
+| [`SL010`](#sl010-single-allof) | single-allof | safe | default |
 | [`SL101`](#sl101-max-description-length) | max-description-length | annotations | `--level annotations` |
 | [`SL102`](#sl102-drop-examples) | drop-examples | annotations | `--level annotations` |
+| [`SL103`](#sl103-drop-titles) | drop-titles | annotations | `--level annotations` |
 
 ## SL001 redundant-title
 
@@ -40,6 +42,12 @@ model already has from the property key or tool name. Informative titles are kep
 accepts exactly the same instances and is shorter. For `oneOf` the rewrite is only equivalent
 when no instance can match two branches, so overlapping types (`integer`/`number`) are left
 alone. Note: rewriting to plain `X` would reject an explicit `null` — never do that.
+
+`date | None` arrives as `anyOf: [{type: string, format: date}, {type: null}]`. The
+string-only keywords `format`, `pattern`, `minLength` and `maxLength` are hoisted onto
+the merged node, which is equivalent only when exactly one branch is `type: string` and no
+other branch can be a string. If the node already carries one of those keywords, or a branch
+has any other keyword, the node is left alone.
 
 - Safety: `safe` — Validation-equivalent; removes only provably redundant information.
 - Enabled by: default
@@ -127,6 +135,24 @@ behaves differently between the declared draft and 2020-12. Draft-04 is never to
 - Safety: `safe` — Validation-equivalent; removes only provably redundant information.
 - Enabled by: default
 
+## SL010 single-allof
+
+**Collapse single-branch allOf when merging preserves validation.**
+
+A single `allOf` branch can be merged into its parent when their keywords are
+independent. Duplicate keywords (including annotations) are never overwritten. Groups
+that depend on sibling keywords, such as `properties`/`additionalProperties` and
+`if`/`then`/`else`, must stay on one side of the boundary. Unevaluated keywords,
+unknown keywords and moved definition containers are left alone.
+
+Strict tools, unknown or nested dialects, dynamic scopes and references other than
+root-definition pointers are skipped. This keeps reference targets and scope intact.
+Under draft <= 7 a branch's `$ref` is only hoisted when it gains no siblings; a parent
+`$ref` is left alone. Keyword order and all annotation values are preserved.
+
+- Safety: `safe` — Validation-equivalent; removes only provably redundant information.
+- Enabled by: default
+
 ## SL101 max-description-length
 
 **Truncate descriptions longer than max_chars at a sentence boundary.**
@@ -149,6 +175,17 @@ opt-in. Tool-level descriptions are only truncated with `include_tool=true`.
 
 Examples are annotations: dropping them never changes validation, but they can help the
 model produce well-formed arguments — measure before and after on your own evals.
+
+- Safety: `annotations` — Validation-equivalent, but may drop annotation text the model could use.
+- Enabled by: `--level annotations`
+
+## SL103 drop-titles
+
+**Drop all schema title annotations.**
+
+`title` is an annotation keyword, so removing it never changes validation. This lossy
+rule is for users who prefer smaller schemas over retaining display labels. Property names are
+schema keys rather than `title` keywords and are therefore never removed.
 
 - Safety: `annotations` — Validation-equivalent, but may drop annotation text the model could use.
 - Enabled by: `--level annotations`

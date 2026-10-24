@@ -50,9 +50,14 @@ def toolset(*items: dict[str, Any]) -> ToolSet:
 
 def test_select_rules_by_level_enable_disable() -> None:
     safe = [r.id for r in select_rules("safe")]
-    assert safe == ["SL001", "SL002", "SL003", "SL004", "SL005", "SL006", "SL008", "SL009"]
+    assert safe == ["SL001", "SL002", "SL003", "SL004", "SL005", "SL006", "SL008", "SL009", "SL010"]
     annotations = [r.id for r in select_rules("annotations")]
-    assert annotations == [*safe, "SL101", "SL102"]  # the level is the gate for lossy rules
+    assert annotations == [
+        *safe,
+        "SL101",
+        "SL102",
+        "SL103",
+    ]  # the level is the gate for lossy rules
     assert "SL101" in [r.id for r in select_rules("safe", enable=["max-description-length"])]
     assert "SL001" not in [r.id for r in select_rules("safe", disable=["SL001"])]
     assert "SL007" in [r.id for r in select_rules(Safety.SAFE, enable=["SL007"])]
@@ -398,3 +403,28 @@ def test_thousand_tools_are_fast() -> None:
     assert report.tool_count == 1000
     assert report.saved > 0
     assert elapsed < 5, f"slimming 1000 tools took {elapsed:.1f}s"
+
+
+@pytest.mark.skipif(not verify_available(), reason="verify extra not installed")
+def test_verification_does_not_change_the_output_or_the_input() -> None:
+    import copy
+
+    shared = {"type": "object", "properties": {"n": {"type": "string", "title": "N"}}}
+    schema = {
+        "type": "object",
+        "properties": {
+            "a": {"type": "array", "items": {"$ref": "#/$defs/X"}, "title": "A"},
+            "c": {"type": "object", "additionalProperties": True},  # SL008: forces sampling
+            "b": {"$ref": "#/$defs/X"},
+        },
+        "$defs": {"X": shared},
+    }
+    ts = toolset({"name": "t", "description": "d", "inputSchema": schema})
+    pristine = copy.deepcopy(ts.tools[0].input_schema)
+    plain = slim(ts, tokenizer=H)
+    verified = slim(ts, tokenizer=H, verify=True)
+    assert verified.toolset.tools[0].input_schema == plain.toolset.tools[0].input_schema
+    assert "$ref" in str(verified.toolset.tools[0].input_schema)  # refs are not expanded
+    assert ts.tools[0].input_schema == pristine
+    assert verified.report.after == plain.report.after
+    assert verified.report.verification[0].method == "sampled"

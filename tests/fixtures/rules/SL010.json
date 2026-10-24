@@ -1,0 +1,301 @@
+[
+  {
+    "name": "bare singleton",
+    "tool": {"name": "t", "schema": {"allOf": [{"type": "string"}]}},
+    "expected_schema": {"type": "string"}
+  },
+  {
+    "name": "preserve insertion order and annotations",
+    "tool": {"name": "t", "schema": {"description": "Name", "allOf": [{"type": "string", "minLength": 1}], "maxLength": 9}},
+    "expected_schema": {"description": "Name", "type": "string", "minLength": 1, "maxLength": 9}
+  },
+  {
+    "name": "nested wrappers collapse bottom up",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"allOf": [{"allOf": [{"type": "integer"}]}]}}}},
+    "expected_schema": {"type": "object", "properties": {"x": {"type": "integer"}}}
+  },
+  {
+    "name": "empty branch",
+    "tool": {"name": "t", "schema": {"type": "string", "allOf": [{}]}},
+    "expected_schema": {"type": "string"}
+  },
+  {
+    "name": "whole closed object stays together",
+    "tool": {"name": "t", "schema": {"allOf": [{"type": "object", "properties": {"x": {"type": "string"}}, "required": ["x"], "additionalProperties": false}]}},
+    "expected_schema": {"type": "object", "properties": {"x": {"type": "string"}}, "required": ["x"], "additionalProperties": false}
+  },
+  {
+    "name": "independent constraints merge",
+    "tool": {"name": "t", "schema": {"type": "object", "required": ["x"], "allOf": [{"properties": {"x": {"type": "string"}}}]}},
+    "expected_schema": {"type": "object", "required": ["x"], "properties": {"x": {"type": "string"}}}
+  },
+  {
+    "name": "non-singleton or non-object []",
+    "tool": {"name": "t", "schema": {"allOf": []}}
+  },
+  {
+    "name": "non-singleton or non-object [{}, {}]",
+    "tool": {"name": "t", "schema": {"allOf": [{}, {}]}}
+  },
+  {
+    "name": "non-singleton or non-object [true]",
+    "tool": {"name": "t", "schema": {"allOf": [true]}}
+  },
+  {
+    "name": "non-singleton or non-object [false]",
+    "tool": {"name": "t", "schema": {"allOf": [false]}}
+  },
+  {
+    "name": "non-singleton or non-object [1]",
+    "tool": {"name": "t", "schema": {"allOf": [1]}}
+  },
+  {
+    "name": "non-singleton or non-object [\"string\"]",
+    "tool": {"name": "t", "schema": {"allOf": ["string"]}}
+  },
+  {
+    "name": "non-singleton or non-object [null]",
+    "tool": {"name": "t", "schema": {"allOf": [null]}}
+  },
+  {
+    "name": "non-singleton or non-object {}",
+    "tool": {"name": "t", "schema": {"allOf": {}}}
+  },
+  {
+    "name": "non-singleton or non-object null",
+    "tool": {"name": "t", "schema": {"allOf": null}}
+  },
+  {
+    "name": "duplicate keyword even when equal",
+    "tool": {"name": "t", "schema": {"type": "string", "allOf": [{"type": "string"}]}}
+  },
+  {
+    "name": "duplicate annotation",
+    "tool": {"name": "t", "schema": {"description": "a", "allOf": [{"description": "b"}]}}
+  },
+  {
+    "name": "strict untouched",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"allOf": [{"type": "string"}]}}, "required": ["x"], "additionalProperties": false}},
+    "strict": true
+  },
+  {
+    "name": "keep separate properties / additionalProperties",
+    "tool": {"name": "t", "schema": {"properties": {"x": {}}, "allOf": [{"additionalProperties": false}]}}
+  },
+  {
+    "name": "keep separate additionalProperties / properties",
+    "tool": {"name": "t", "schema": {"additionalProperties": false, "allOf": [{"properties": {"x": {}}}]}}
+  },
+  {
+    "name": "keep separate patternProperties / additionalProperties",
+    "tool": {"name": "t", "schema": {"patternProperties": {"^x": {}}, "allOf": [{"additionalProperties": false}]}}
+  },
+  {
+    "name": "keep separate additionalProperties / patternProperties",
+    "tool": {"name": "t", "schema": {"additionalProperties": false, "allOf": [{"patternProperties": {"^x": {}}}]}}
+  },
+  {
+    "name": "keep separate prefixItems / items",
+    "tool": {"name": "t", "schema": {"prefixItems": [{"type": "string"}], "allOf": [{"items": false}]}}
+  },
+  {
+    "name": "keep separate items / prefixItems",
+    "tool": {"name": "t", "schema": {"items": false, "allOf": [{"prefixItems": [{"type": "string"}]}]}}
+  },
+  {
+    "name": "keep separate items / additionalItems",
+    "tool": {"name": "t", "schema": {"items": [{"type": "string"}], "allOf": [{"additionalItems": false}]}}
+  },
+  {
+    "name": "keep separate additionalItems / items",
+    "tool": {"name": "t", "schema": {"additionalItems": false, "allOf": [{"items": [{"type": "string"}]}]}}
+  },
+  {
+    "name": "keep separate contains / minContains",
+    "tool": {"name": "t", "schema": {"contains": {"const": 1}, "allOf": [{"minContains": 2}]}}
+  },
+  {
+    "name": "keep separate minContains / contains",
+    "tool": {"name": "t", "schema": {"minContains": 2, "allOf": [{"contains": {"const": 1}}]}}
+  },
+  {
+    "name": "keep separate contains / maxContains",
+    "tool": {"name": "t", "schema": {"contains": {"const": 1}, "allOf": [{"maxContains": 1}]}}
+  },
+  {
+    "name": "keep separate maxContains / contains",
+    "tool": {"name": "t", "schema": {"maxContains": 1, "allOf": [{"contains": {"const": 1}}]}}
+  },
+  {
+    "name": "keep separate if / then",
+    "tool": {"name": "t", "schema": {"if": {"type": "string"}, "allOf": [{"then": {"minLength": 3}}]}}
+  },
+  {
+    "name": "keep separate then / if",
+    "tool": {"name": "t", "schema": {"then": {"minLength": 3}, "allOf": [{"if": {"type": "string"}}]}}
+  },
+  {
+    "name": "keep separate if / else",
+    "tool": {"name": "t", "schema": {"if": {"type": "string"}, "allOf": [{"else": {"type": "number"}}]}}
+  },
+  {
+    "name": "keep separate else / if",
+    "tool": {"name": "t", "schema": {"else": {"type": "number"}, "allOf": [{"if": {"type": "string"}}]}}
+  },
+  {
+    "name": "keep separate minimum / exclusiveMinimum",
+    "tool": {"name": "t", "schema": {"minimum": 1, "allOf": [{"exclusiveMinimum": true}]}}
+  },
+  {
+    "name": "keep separate exclusiveMinimum / minimum",
+    "tool": {"name": "t", "schema": {"exclusiveMinimum": true, "allOf": [{"minimum": 1}]}}
+  },
+  {
+    "name": "keep separate maximum / exclusiveMaximum",
+    "tool": {"name": "t", "schema": {"maximum": 3, "allOf": [{"exclusiveMaximum": true}]}}
+  },
+  {
+    "name": "keep separate exclusiveMaximum / maximum",
+    "tool": {"name": "t", "schema": {"exclusiveMaximum": true, "allOf": [{"maximum": 3}]}}
+  },
+  {
+    "name": "parent unevaluatedProperties",
+    "tool": {"name": "t", "schema": {"allOf": [{"type": "object"}], "unevaluatedProperties": false}}
+  },
+  {
+    "name": "branch unevaluatedProperties",
+    "tool": {"name": "t", "schema": {"type": "object", "allOf": [{"unevaluatedProperties": false}]}}
+  },
+  {
+    "name": "parent unevaluatedItems",
+    "tool": {"name": "t", "schema": {"allOf": [{"type": "object"}], "unevaluatedItems": false}}
+  },
+  {
+    "name": "branch unevaluatedItems",
+    "tool": {"name": "t", "schema": {"type": "object", "allOf": [{"unevaluatedItems": false}]}}
+  },
+  {
+    "name": "do not move $id",
+    "tool": {"name": "t", "schema": {"allOf": [{"$id": "https://example.invalid/nested", "type": "string"}]}}
+  },
+  {
+    "name": "do not move id",
+    "tool": {"name": "t", "schema": {"allOf": [{"id": "https://example.invalid/nested", "type": "string"}]}}
+  },
+  {
+    "name": "do not move $schema",
+    "tool": {"name": "t", "schema": {"allOf": [{"$schema": "http://json-schema.org/draft-07/schema#", "type": "string"}]}}
+  },
+  {
+    "name": "do not move $anchor",
+    "tool": {"name": "t", "schema": {"allOf": [{"$anchor": "here", "type": "string"}]}}
+  },
+  {
+    "name": "do not move $dynamicAnchor",
+    "tool": {"name": "t", "schema": {"allOf": [{"$dynamicAnchor": "here", "type": "string"}]}}
+  },
+  {
+    "name": "do not move $recursiveAnchor",
+    "tool": {"name": "t", "schema": {"allOf": [{"$recursiveAnchor": true, "type": "string"}]}}
+  },
+  {
+    "name": "do not move $defs",
+    "tool": {"name": "t", "schema": {"allOf": [{"$defs": {"X": {"type": "string"}}, "type": "string"}]}}
+  },
+  {
+    "name": "do not move definitions",
+    "tool": {"name": "t", "schema": {"allOf": [{"definitions": {"X": {"type": "string"}}, "type": "string"}]}}
+  },
+  {
+    "name": "unknown keyword at parent",
+    "tool": {"name": "t", "schema": {"x-custom": true, "allOf": [{"type": "string"}]}}
+  },
+  {
+    "name": "unknown keyword in branch",
+    "tool": {"name": "t", "schema": {"allOf": [{"x-custom": true}]}}
+  },
+  {
+    "name": "unknown dialect",
+    "tool": {"name": "t", "schema": {"$schema": "https://example.invalid/dialect", "allOf": [{"type": "string"}]}}
+  },
+  {
+    "name": "literal data untouched",
+    "tool": {"name": "t", "schema": {"const": {"allOf": [{"type": "string"}]}}}
+  },
+  {
+    "name": "draft 04 independent constraints",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-04/schema#", "maxLength": 3, "allOf": [{"type": "string"}]}},
+    "expected_schema": {"$schema": "http://json-schema.org/draft-04/schema#", "maxLength": 3, "type": "string"}
+  },
+  {
+    "name": "draft 04 ref siblings not introduced",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-04/schema#", "definitions": {"X": {"type": "string"}}, "properties": {"x": {"minLength": 2, "allOf": [{"$ref": "#/definitions/X"}]}}}}
+  },
+  {
+    "name": "draft 04 bare ref",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-04/schema#", "definitions": {"X": {"type": "string"}}, "properties": {"x": {"allOf": [{"$ref": "#/definitions/X"}]}}}},
+    "expected_schema": {"$schema": "http://json-schema.org/draft-04/schema#", "definitions": {"X": {"type": "string"}}, "properties": {"x": {"$ref": "#/definitions/X"}}}
+  },
+  {
+    "name": "draft 04 parent ref ignores allOf",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-04/schema#", "definitions": {"X": {"type": "string"}}, "$ref": "#/definitions/X", "allOf": [{"minLength": 2}]}}
+  },
+  {
+    "name": "draft 06 independent constraints",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-06/schema#", "maxLength": 3, "allOf": [{"type": "string"}]}},
+    "expected_schema": {"$schema": "http://json-schema.org/draft-06/schema#", "maxLength": 3, "type": "string"}
+  },
+  {
+    "name": "draft 06 ref siblings not introduced",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-06/schema#", "definitions": {"X": {"type": "string"}}, "properties": {"x": {"minLength": 2, "allOf": [{"$ref": "#/definitions/X"}]}}}}
+  },
+  {
+    "name": "draft 06 bare ref",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-06/schema#", "definitions": {"X": {"type": "string"}}, "properties": {"x": {"allOf": [{"$ref": "#/definitions/X"}]}}}},
+    "expected_schema": {"$schema": "http://json-schema.org/draft-06/schema#", "definitions": {"X": {"type": "string"}}, "properties": {"x": {"$ref": "#/definitions/X"}}}
+  },
+  {
+    "name": "draft 06 parent ref ignores allOf",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-06/schema#", "definitions": {"X": {"type": "string"}}, "$ref": "#/definitions/X", "allOf": [{"minLength": 2}]}}
+  },
+  {
+    "name": "draft 07 independent constraints",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-07/schema#", "maxLength": 3, "allOf": [{"type": "string"}]}},
+    "expected_schema": {"$schema": "http://json-schema.org/draft-07/schema#", "maxLength": 3, "type": "string"}
+  },
+  {
+    "name": "draft 07 ref siblings not introduced",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-07/schema#", "definitions": {"X": {"type": "string"}}, "properties": {"x": {"minLength": 2, "allOf": [{"$ref": "#/definitions/X"}]}}}}
+  },
+  {
+    "name": "draft 07 bare ref",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-07/schema#", "definitions": {"X": {"type": "string"}}, "properties": {"x": {"allOf": [{"$ref": "#/definitions/X"}]}}}},
+    "expected_schema": {"$schema": "http://json-schema.org/draft-07/schema#", "definitions": {"X": {"type": "string"}}, "properties": {"x": {"$ref": "#/definitions/X"}}}
+  },
+  {
+    "name": "draft 07 parent ref ignores allOf",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-07/schema#", "definitions": {"X": {"type": "string"}}, "$ref": "#/definitions/X", "allOf": [{"minLength": 2}]}}
+  },
+  {
+    "name": "2019-09 ref and sibling constraints",
+    "tool": {"name": "t", "schema": {"$schema": "https://json-schema.org/draft/2019-09/schema", "$defs": {"X": {"type": "string"}}, "minLength": 2, "allOf": [{"$ref": "#/$defs/X"}]}},
+    "expected_schema": {"$schema": "https://json-schema.org/draft/2019-09/schema", "$defs": {"X": {"type": "string"}}, "minLength": 2, "$ref": "#/$defs/X"}
+  },
+  {
+    "name": "2020-12 ref and sibling constraints",
+    "tool": {"name": "t", "schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "$defs": {"X": {"type": "string"}}, "minLength": 2, "allOf": [{"$ref": "#/$defs/X"}]}},
+    "expected_schema": {"$schema": "https://json-schema.org/draft/2020-12/schema", "$defs": {"X": {"type": "string"}}, "minLength": 2, "$ref": "#/$defs/X"}
+  },
+  {
+    "name": "references into moved branch stay valid",
+    "tool": {"name": "t", "schema": {"$defs": {"X": {"allOf": [{"type": "string"}]}}, "$ref": "#/$defs/X/allOf/0"}}
+  },
+  {
+    "name": "external refs left alone",
+    "tool": {"name": "t", "schema": {"allOf": [{"$ref": "https://example.invalid/schema"}]}}
+  },
+  {
+    "name": "nested dialect left alone",
+    "tool": {"name": "t", "schema": {"$defs": {"X": {"$schema": "http://json-schema.org/draft-07/schema#", "allOf": [{"type": "string"}]}}}}
+  }
+]

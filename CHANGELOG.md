@@ -8,17 +8,39 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- SL010 `single-allof` collapses single-branch `allOf` wrappers when their keywords can be
+  merged without changing validation. Strict tools and uncertain dialect or reference scopes
+  are left alone.
+
+- `toolism diff`: per-tool unified previews of changed descriptions and input schemas,
+  with the same level/rule selection as `slim`, stdin and output-file support.
 - `examples/openai_startup.py`: `slim_tools` with the OpenAI SDK.
 - README: offline use of the default tokenizer, a security note on `--mcp`, a cost estimate
   in the FAQ, and a Stability section defining the public API and the deprecation policy.
+- `SL103 drop-titles`: opt-in annotation-level rule that removes schema `title` keywords.
 - pre-commit hook `toolism-check` (`.pre-commit-hooks.yaml`), the same budget gate as
   `toolism check`, run before each commit.
+- README: an Environment variables section listing every variable toolism reads.
+- Python 3.14 is now tested in CI and listed in the package classifiers.
 
 ### Changed
 
+- SL002 now hoists `format`, `pattern`, `minLength` and `maxLength` when rewriting a nullable
+  `anyOf`/`oneOf`, so `date | None` (`anyOf: [{type: string, format: date}, {type: null}]`)
+  becomes `{type: [string, null], format: date}`. It only does so when exactly one branch is
+  `type: string` and no other branch can be a string; any other extra keyword leaves the node
+  unchanged.
 - `--verify` no longer throws away every change to a tool when one rule breaks it: it finds the
   rules responsible, reverts only those, and keeps the other rules' savings (re-verified).
   `Rollback` gains a `reverted` field, also in the JSON report.
+
+### Fixed
+
+- `toolism measure` now preserves duplicate tool name warnings in table, Markdown and JSON output.
+- `--verify` no longer rewrites the schemas it checks. hypothesis-jsonschema resolves `$ref`s in
+  place, so with `--verify` the slimmed output could come back with `$ref`s expanded (more tokens
+  than the report showed), and the caller's input tool set was modified too. Verification now
+  works on copies; output is identical with and without `--verify`.
 
 ## [0.1.0] - 2026-10-23
 
@@ -44,3 +66,7 @@ All notable changes to this project are documented here. The format follows
   `summary-file` outputs.
 - Benchmark on 14 real tool sets (159 tools): 37.4% fewer tokens in total, median 11.3% per tool
   set, with zero equivalence counterexamples.
+
+[Unreleased]: https://github.com/rakeshnitb23/toolism/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/rakeshnitb23/toolism/releases/tag/v0.1.0
+

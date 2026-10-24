@@ -73,7 +73,7 @@ def test_version(runner: CliRunner) -> None:
 def test_help_lists_commands(runner: CliRunner) -> None:
     result = invoke(runner, "--help")
     assert result.exit_code == 0
-    for command in ("measure", "slim", "check", "rules"):
+    for command in ("measure", "slim", "diff", "check", "rules"):
         assert command in result.stdout
 
 
@@ -149,6 +149,15 @@ def test_invalid_json_reports_position(runner: CliRunner) -> None:
     assert "invalid JSON at line 1, column 12" in result.stderr
 
 
+def test_missing_input_file_shows_hint(runner: CliRunner) -> None:
+    result = invoke(runner, "measure", "missing.json")
+    assert result.exit_code == 2
+    assert result.stderr == (
+        "error: file not found: missing.json\n"
+        "hint: check the path, or pass '-' to read from stdin (or --mcp to read from a server)\n"
+    )
+
+
 def test_unavailable_tokenizer_exits_3(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
     from toolism.errors import TokenizerUnavailable
     from toolism.tokenizers import TiktokenTokenizer
@@ -161,6 +170,30 @@ def test_unavailable_tokenizer_exits_3(runner: CliRunner, monkeypatch: pytest.Mo
     result = invoke(runner, "measure", MCP_TOOLS, "-t", "tiktoken:o200k_base")
     assert result.exit_code == 3
     assert result.stderr == "error: cannot load o200k_base\nhint: set TIKTOKEN_CACHE_DIR\n"
+
+
+def test_debug_reraises_toolism_errors(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    from toolism.errors import FormatError
+
+    monkeypatch.setenv("TOOLISM_DEBUG", "1")
+    result = invoke(runner, "measure", "missing.json")
+    assert isinstance(result.exception, FormatError)
+
+
+def test_debug_reraises_tokenizer_unavailable(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from toolism.errors import TokenizerUnavailable
+    from toolism.tokenizers import TiktokenTokenizer
+
+    def unavailable_load(encoding: str) -> Any:
+        raise TokenizerUnavailable("cannot load o200k_base", hint="set TIKTOKEN_CACHE_DIR")
+
+    # Same stub as test_unavailable_tokenizer_exits_3: no network, no cache.
+    monkeypatch.setattr(TiktokenTokenizer, "_load", staticmethod(unavailable_load))
+    monkeypatch.setenv("TOOLISM_DEBUG", "1")
+    result = invoke(runner, "measure", MCP_TOOLS, "-t", "tiktoken:o200k_base")
+    assert isinstance(result.exception, TokenizerUnavailable)
 
 
 def test_internal_errors_are_one_line_unless_debug(
@@ -481,6 +514,251 @@ def test_main_switches_non_utf8_streams_to_utf8(monkeypatch: pytest.MonkeyPatch)
     assert out.encoding == "utf-8"
     out.write("— ✅ ünïcode")  # would raise UnicodeEncodeError under cp1252
     out.flush()
+
+
+# ---------------------------------------------------------------------- diff
+
+
+def test_diff_changed_tool_and_unchanged_file(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "tools.json"
+    original = json.dumps(
+        {
+            "tools": [
+                {"name": "search", "inputSchema": {"title": "searchArguments", "type": "object"}},
+                {"name": "ping", "inputSchema": {"type": "object"}},
+            ]
+        }
+    )
+    source.write_text(original, encoding="utf-8")
+    # A preview must not consult the user's possibly remote reporting tokenizer.
+    monkeypatch.setenv("TOOLISM_TOKENIZER", "not-a-tokenizer")
+    result = invoke(runner, "diff", source)
+    assert result.exit_code == 0, result.output
+    assert result.stderr == ""
+    assert result.stdout == (
+        '--- "search" (before)\n'
+        '+++ "search" (after)\n'
+        "@@ -1,7 +1,6 @@\n"
+        " {\n"
+        '   "name": "search",\n'
+        '   "parameters": {\n'
+        '-    "title": "searchArguments",\n'
+        '     "type": "object"\n'
+        "   }\n"
+        " }\n"
+    )
+    assert source.read_text(encoding="utf-8") == original
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        [],
+        {"tools": []},
+        [{"name": "ping", "inputSchema": {"type": "object"}}],
+        [{"type": "web_search_20250305", "name": "web_search"}],
+    ],
+)
+def test_diff_omits_unchanged_tools(runner: CliRunner, document: Any) -> None:
+    result = invoke(runner, "diff", "-", input=json.dumps(document))
+    assert result.exit_code == 0, result.output
+    assert result.stdout == result.stderr == ""
+
+
+@pytest.mark.parametrize(
+    ("args", "changes"),
+    [
+        ((), False),
+        (("--level", "annotations"), True),
+        (("--enable", "SL102"), True),
+        (("--level", "annotations", "-e", "SL007,SL102", "-d", "drop-examples"), False),
+    ],
+)
+def test_diff_uses_slim_level_and_rule_selection(
+    runner: CliRunner, args: tuple[str, ...], changes: bool
+) -> None:
+    document = [
+        {
+            "name": "search",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"q": {"type": "string", "examples": ["sample"]}},
+            },
+        }
+    ]
+    result = invoke(runner, "diff", "-", *args, input=json.dumps(document))
+    assert result.exit_code == 0, result.output
+    assert result.stderr == ""
+    if changes:
+        assert '-        "examples": [\n' in result.stdout
+        assert '-          "sample"\n' in result.stdout
+    else:
+        assert result.stdout == ""
+
+
+def test_diff_applies_repeated_rule_options_to_tool_description(runner: CliRunner) -> None:
+    document = [
+        {
+            "name": "search",
+            "description": "A long description with additional details for readers.",
+            "inputSchema": {"type": "object"},
+        }
+    ]
+    result = invoke(
+        runner,
+        "diff",
+        "-",
+        "-e",
+        "SL101",
+        "--option",
+        "SL101.max_chars=20",
+        "--option",
+        "SL101.include_tool=true",
+        input=json.dumps(document),
+    )
+    assert result.exit_code == 0, result.output
+    assert result.stderr == ""
+    assert (
+        '-  "description": "A long description with additional details for readers.",'
+        in result.stdout
+    )
+    assert '+  "description": "A long description' in result.stdout
+
+
+def test_diff_shows_description_only_cleanup(runner: CliRunner) -> None:
+    document = [{"name": "search", "description": "Search.   ", "inputSchema": {"type": "object"}}]
+    result = invoke(runner, "diff", "-", input=json.dumps(document))
+    assert result.exit_code == 0, result.output
+    assert '-  "description": "Search.   ",' in result.stdout
+    assert '+  "description": "Search.",' in result.stdout
+
+
+def test_diff_does_not_confuse_tool_reordering_with_schema_changes(runner: CliRunner) -> None:
+    document = [{"name": name, "inputSchema": {"type": "object"}} for name in ("z", "a")]
+    result = invoke(runner, "diff", "-", "--enable", "SL007", input=json.dumps(document))
+    assert result.exit_code == 0, result.output
+    assert result.stdout == result.stderr == ""
+
+
+def test_diff_retains_duplicate_occurrences_when_tools_are_reordered(runner: CliRunner) -> None:
+    document = [
+        {"name": "z", "inputSchema": {"type": "object"}},
+        {
+            "name": "same",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"first": {"type": "string", "default": None}},
+            },
+        },
+        {
+            "name": "same",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"second": {"type": "string", "default": None}},
+            },
+        },
+        {"name": "a", "inputSchema": {"type": "object"}},
+    ]
+    result = invoke(runner, "diff", "-", "-e", "SL007", input=json.dumps(document))
+    assert result.exit_code == 0, result.output
+    assert result.stdout.count('--- "same"') == 2
+    assert '--- "same" [1] (before)' in result.stdout
+    assert '--- "same" [2] (before)' in result.stdout
+    assert result.stdout.index('--- "same" [1]') < result.stdout.index('--- "same" [2]')
+    assert result.stdout.count('-        "default": null,') == 2
+    assert '--- "z"' not in result.stdout
+    assert '--- "a"' not in result.stdout
+    assert "Warning: duplicate tool name 'same' (2 times)" in result.stderr
+
+
+def test_diff_writes_output_file(runner: CliRunner, bloated: Path, tmp_path: Path) -> None:
+    target = tmp_path / "reports" / "tools.diff"
+    result = invoke(runner, "diff", bloated, "--output", target)
+    assert result.exit_code == 0, result.output
+    assert result.stdout == result.stderr == ""
+    assert target.read_text(encoding="utf-8").startswith('--- "create_issue" (before)\n')
+
+
+def test_diff_replaces_stale_output_with_empty_result(runner: CliRunner, tmp_path: Path) -> None:
+    target = tmp_path / "tools.diff"
+    target.write_text("old diff", encoding="utf-8")
+    result = invoke(runner, "diff", "-", "-o", target, input="[]")
+    assert result.exit_code == 0, result.output
+    assert result.stdout == result.stderr == ""
+    assert target.read_bytes() == b""
+
+
+def test_diff_headers_escape_controls_and_preserve_unicode(runner: CliRunner) -> None:
+    document = [
+        {
+            "name": "café\n\x1b[31m",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"x": {"type": "string", "default": None}},
+            },
+        }
+    ]
+    result = invoke(runner, "diff", "-", input=json.dumps(document))
+    assert result.exit_code == 0, result.output
+    assert result.stdout.startswith('--- "café\\n\\u001b[31m" (before)\n')
+    assert "\x1b" not in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("source", "args", "message"),
+    [
+        ("not json", (), "invalid JSON"),
+        ("[]", ("-e", "NOT_A_RULE"), "unknown rule"),
+        ("[]", ("-e", "SL101", "--option", "SL101.max_chars=oops"), "max_chars"),
+    ],
+)
+def test_diff_reports_real_input_and_selection_errors(
+    runner: CliRunner, source: str, args: tuple[str, ...], message: str
+) -> None:
+    result = invoke(runner, "diff", "-", *args, input=source)
+    assert result.exit_code == 2
+    assert message in result.stderr
+    assert "Traceback" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("separator", "escaped"),
+    [
+        ("\u0085", "\\u0085"),
+        ("\u2028", "\\u2028"),
+        ("\u2029", "\\u2029"),
+    ],
+)
+def test_diff_keeps_lf_hunks_with_unicode_line_separators(
+    runner: CliRunner, separator: str, escaped: str
+) -> None:
+    document = [
+        {
+            "name": f"line{separator}name",
+            "description": f"one{separator}two  ",
+            "inputSchema": {"type": "object"},
+        }
+    ]
+    result = invoke(runner, "diff", "-", input=json.dumps(document))
+    assert result.exit_code == 0, result.output
+    assert result.stdout.startswith(f'--- "line{escaped}name" (before)\n')
+    assert "@@ -1,5 +1,5 @@\n" in result.stdout
+    assert f'   "name": "line{separator}name",\n' in result.stdout
+
+
+def test_diff_requires_source(runner: CliRunner) -> None:
+    result = invoke(runner, "diff")
+    assert result.exit_code == 2
+    assert "missing argument" in result.output.lower()
+    assert "SOURCE" in result.output
+
+
+def test_diff_reports_output_write_errors(runner: CliRunner, bloated: Path, tmp_path: Path) -> None:
+    result = invoke(runner, "diff", bloated, "-o", tmp_path)
+    assert result.exit_code == 2
+    assert "cannot write" in result.stderr
 
 
 def test_architecture_doc_lists_every_cli_option() -> None:

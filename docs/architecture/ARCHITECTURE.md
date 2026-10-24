@@ -100,7 +100,7 @@ models, errors         (bottom: no internal deps)
 | C8 | Verify | `verify.py` | Bidirectional property-based equivalence; deterministic; reports `equivalent / counterexample / skipped` |
 | C9 | Measure & report | `measure.py`, `report.py` | `TokenReport`, `SlimReport`; renderers: rich table, JSON (versioned), Markdown |
 | C10 | Check | `check.py` | Baseline file, budgets, comparison → `CheckResult`, exit codes |
-| C11 | CLI | `cli.py` | `toolism measure / slim / check / rules` |
+| C11 | CLI | `cli.py` | `toolism measure / slim / diff / check / rules` |
 | C12 | MCP loader | `loaders/mcp.py` | Launch an MCP server over stdio and page through `tools/list` (extra: `mcp`) |
 | C13 | GitHub Action & CI | `action.yml`, `.github/workflows/*` | Composite Action wrapping `toolism check`; CI matrix; release via PyPI trusted publishing |
 | C14 | Benchmark | `bench/` | Snapshots of public MCP servers + Pydantic-style schemas; results across tokenizers |
@@ -189,6 +189,9 @@ toolism check   SOURCE --baseline FILE [--max-increase 10%|500] [--max-total N] 
                         [--update-baseline] [--allow-tokenizer-change] [--tokenizer T]
                         [--format table|json|markdown] [--output FILE] [--summary-md FILE]
 toolism rules   [--format table|json|markdown] [--output FILE]
+
+toolism diff    SOURCE [--level safe|annotations] [--enable ID]... [--disable ID]...
+                        [--option ID.key=value]... [--output FILE]
 ```
 
 `measure`, `slim` and `check` also take `--mcp COMMAND` and `--mcp-timeout SECONDS` in place of

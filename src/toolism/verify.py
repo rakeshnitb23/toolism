@@ -10,6 +10,7 @@ Needs the ``verify`` extra: ``pip install 'toolism[verify]'``.
 
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass
 from enum import Enum
@@ -189,6 +190,9 @@ def check_equivalence(
         return VerificationResult(tool, Verdict.EQUIVALENT, method="annotations-only")
     if not verify_available():
         raise MissingExtraError("Equivalence verification", "verify")
+    # hypothesis-jsonschema resolves $refs in place, so never hand it the caller's schemas:
+    # it would rewrite the slimmed output (and the user's input) behind our back.
+    left, right = copy.deepcopy(left), copy.deepcopy(right)
 
     try:
         accepts_left, accepts_right = _validator(left), _validator(right)

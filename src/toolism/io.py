@@ -43,7 +43,10 @@ def _read(source: Source) -> str:
     try:
         return path.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
-        raise FormatError(f"file not found: {path}") from exc
+        raise FormatError(
+            f"file not found: {path}",
+            hint="check the path, or pass '-' to read from stdin (or --mcp to read from a server)",
+        ) from exc
     except UnicodeDecodeError as exc:
         raise FormatError(f"{path} is not valid UTF-8") from exc
     except OSError as exc:

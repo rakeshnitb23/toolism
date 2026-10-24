@@ -353,6 +353,51 @@ def slim(
 
 @app.command()
 @_handle_errors
+def diff(
+    source: SourceArg,
+    level: Annotated[
+        Level,
+        typer.Option("--level", "-l", help="safe: redundant text; annotations: also lossy text."),
+    ] = Level.safe,
+    enable: Annotated[
+        list[str] | None,
+        typer.Option("--enable", "-e", metavar="RULE", help="Turn a rule on. Repeatable."),
+    ] = None,
+    disable: Annotated[
+        list[str] | None,
+        typer.Option("--disable", "-d", metavar="RULE", help="Turn a rule off. Repeatable."),
+    ] = None,
+    option: Annotated[
+        list[str] | None,
+        typer.Option("--option", metavar="RULE.KEY=VALUE", help="Set a rule option. Repeatable."),
+    ] = None,
+    output: OutputOpt = None,
+) -> None:
+    """Preview per-tool changes as a unified diff; omit unchanged tools."""
+    from toolism.pipeline import slim as slim_toolset
+    from toolism.report import render_tool_diff
+    from toolism.rules import parse_option_assignment
+
+    options: dict[str, dict[str, str]] = {}
+    for assignment in option or []:
+        rule_key, key, value = parse_option_assignment(assignment)
+        options.setdefault(rule_key, {})[key] = value
+    toolset = _load(source, None, 60.0)
+    result = slim_toolset(
+        toolset,
+        level=level.value,
+        enable=_split(enable),
+        disable=_split(disable),
+        options=options,
+        tokenizer="heuristic",
+    )
+    _emit(render_tool_diff(toolset, result.toolset), output)
+    for warning in result.report.warnings:
+        typer.echo(f"Warning: {warning}", err=True)
+
+
+@app.command()
+@_handle_errors
 def check(
     source: SourceArg = None,
     mcp: McpOpt = None,

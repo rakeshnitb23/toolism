@@ -48,7 +48,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python: ["3.10", "3.11", "3.12", "3.13"]
+        python: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         include:
           - os: macos-latest
             python: "3.12"
@@ -67,6 +67,13 @@ jobs:
           key: tiktoken-${{ runner.os }}-v1
       - run: uv sync --locked --all-extras
       - run: uv run pytest -m "not slow" --cov --cov-report=term-missing
+
+  policy-script:
+    name: assignment policy script
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: node --test .github/scripts/assignment-policy.test.js
 
   bench-equivalence:
     name: bench equivalence (real servers)

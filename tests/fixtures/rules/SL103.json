@@ -1,0 +1,35 @@
+[
+  {
+    "name": "titles are removed from root, nested schemas, and defs",
+    "tool": {"name": "create_issue", "schema": {
+      "type": "object", "title": "Create an issue",
+      "properties": {
+        "title": {"type": "string", "title": "Issue title"},
+        "metadata": {"type": "object", "title": "Metadata", "properties": {"priority": {"type": "integer", "title": "Priority"}}}
+      },
+      "$defs": {"Assignee": {"type": "object", "title": "Assignee", "properties": {"name": {"type": "string", "title": "Name"}}}}
+    }},
+    "expected_schema": {
+      "type": "object",
+      "properties": {
+        "title": {"type": "string"},
+        "metadata": {"type": "object", "properties": {"priority": {"type": "integer"}}}
+      },
+      "$defs": {"Assignee": {"type": "object", "properties": {"name": {"type": "string"}}}}
+    }
+  },
+  {
+    "name": "a property named title remains a property",
+    "tool": {"name": "create_issue", "schema": {
+      "type": "object",
+      "properties": {"title": {"type": "string"}}
+    }}
+  },
+  {
+    "name": "title values inside non-schema positions are unchanged",
+    "tool": {"name": "search", "schema": {
+      "type": "object",
+      "properties": {"kind": {"enum": [{"title": "Keep this value"}]}}
+    }}
+  }
+]

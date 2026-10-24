@@ -62,3 +62,25 @@ def test_readme_benchmark_numbers_match_results() -> None:
     median = results["median_saved_pct"]["safe"]
     assert f"**{total:.1f}% in total, with a median of {median:.1f}% per tool set**" in readme
     assert f"On {len(results['snapshots'])} tool sets ({results['total_tools']} tools" in readme
+
+
+def test_measure_savings_example_runs_offline() -> None:
+    out = subprocess.run(
+        [sys.executable, str(ROOT / "examples" / "measure_savings.py")],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    ).stdout
+    match = re.search(
+        r"tokens before: (\d+)\ntokens after:\s+(\d+)\nsaved:\s+(\d+) \((\d+\.\d+)%\)",
+        out,
+    )
+    assert match is not None, out
+    before = int(match.group(1))
+    after = int(match.group(2))
+    saved = int(match.group(3))
+    pct = float(match.group(4))
+    assert after < before
+    assert saved == before - after
+    assert 0 < pct < 100

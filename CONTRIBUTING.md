@@ -7,6 +7,25 @@ wrong.
 This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By taking
 part, you agree to uphold it.
 
+## Picking an issue
+
+You don't need to be assigned. Pick an issue and open a pull request.
+
+| Label | Who can take it | How |
+| --- | --- | --- |
+| [good first issue](https://github.com/rakeshnitb23/toolism/labels/good%20first%20issue) | People new to toolism: **fewer than 5 merged PRs here** | Open a PR. A short comment on the issue first ("working on this") is welcome but not required |
+| [help wanted](https://github.com/rakeshnitb23/toolism/labels/help%20wanted) | Anyone | Same, but share your plan on the issue first for design questions |
+
+- **First PR wins.** If several people open PRs for the same issue, the first one that's ready
+  (CI green and following this guide) is reviewed first. Others may be closed as duplicates, so
+  check the issue's linked PRs before starting.
+- **Open a draft PR early** if the work takes more than a day, so others can see it's taken.
+- **Link the issue** in your PR description: `Closes #N`.
+- **5 or more merged PRs?** Please leave good first issues to newcomers and pick a help wanted
+  issue instead.
+- A bot answers questions on these issues with the rules above, and notes on a PR when another
+  open PR already targets the same issue. It never closes anything; maintainers decide.
+
 ## Development setup
 
 You need [uv](https://docs.astral.sh/uv/) and Python 3.10+.
@@ -114,7 +133,6 @@ Each of these makes a good first issue:
   `{type: [string, null], format: date}`, because `format`, `pattern`, `minLength` and
   `maxLength` only constrain strings. The Python SDK emits this for every `date | None`.
 - **Single-branch `allOf`.** `allOf: [X]` → `X`, when the sibling keywords don't conflict.
-- **SL103 `drop-titles` (lossy).** Drop every `title`, not just redundant ones.
 - **SL104 `dedupe-descriptions` (lossy).** Drop property descriptions repeated verbatim in the
   tool description.
 - **Gemini tokenizer.** `gemini:<model>` using the `count_tokens` API, mirroring
@@ -138,8 +156,8 @@ Each of these makes a good first issue:
 
 ## Releasing (maintainers)
 
-1. Set `__version__` in `src/toolism/__about__.py` and move the CHANGELOG's `Unreleased`
-   section under the new version.
+1. Set `__version__` in `src/toolism/__about__.py`, move the CHANGELOG's `Unreleased`
+   section under the new version, and update the compare links at the end of `CHANGELOG.md`.
 2. Commit, tag `vX.Y.Z` and push the tag. The `Release` workflow checks that the tag matches
    `__version__`, builds, publishes to PyPI with trusted publishing, and creates the GitHub
    release from the CHANGELOG.

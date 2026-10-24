@@ -5,7 +5,9 @@ from __future__ import annotations
 import inspect
 import io
 import json
+from collections import Counter, defaultdict, deque
 from collections.abc import Sequence
+from difflib import unified_diff
 from typing import Any, Literal
 
 from rich.console import Console
@@ -13,6 +15,7 @@ from rich.table import Table
 from rich.text import Text
 
 from toolism.measurement import TokenReport
+from toolism.models import ToolDef, ToolSet
 from toolism.pipeline import SlimReport
 from toolism.rules import Rule, Safety, all_rules
 from toolism.verify import Verdict
@@ -23,6 +26,7 @@ __all__ = [
     "render_rules",
     "render_slim_report",
     "render_token_report",
+    "render_tool_diff",
     "rule_to_dict",
     "slim_report_to_dict",
     "token_report_to_dict",
@@ -88,6 +92,7 @@ def token_report_to_dict(report: TokenReport) -> dict[str, Any]:
             for t in report.tools
         ],
         "uncounted": list(report.uncounted),
+        "warnings": list(report.warnings),
     }
 
 
@@ -102,7 +107,7 @@ def render_token_report(
         f"{_n(report.total)} tokens across {report.tool_count} tools "
         f"(average {report.average:,.0f}) — {_tokenizer_note(report.tokenizer, report.approximate)}"
     )
-    notes = []
+    notes = [f"Warning: {w}" for w in report.warnings]
     if hidden:
         notes.append(f"… {len(hidden)} more tools ({_n(sum(t.tokens for t in hidden))} tokens)")
     if report.uncounted:
@@ -271,6 +276,42 @@ def render_slim_report(
         notes.insert(0, f"… {len(changed) - TOP_N} more changed tools")
     renderables += [Text(note) for note in notes]
     return _console_render(renderables, width, color)
+
+
+# ---------------------------------------------------------------------- diff
+
+
+def render_tool_diff(before: ToolSet, after: ToolSet) -> str:
+    """Preview changed tool content, pairing duplicate names by stable occurrence."""
+    remaining: defaultdict[str, deque[ToolDef]] = defaultdict(deque)
+    for tool in after.function_tools():
+        remaining[tool.name].append(tool)
+    originals = before.function_tools()
+    counts = Counter(tool.name for tool in originals)
+    seen: Counter[str] = Counter()
+    parts: list[str] = []
+    for tool in originals:
+        rewritten = remaining[tool.name].popleft()
+        seen[tool.name] += 1
+        if tool.fingerprint() == rewritten.fingerprint():
+            continue
+        label = json.dumps(tool.name, ensure_ascii=False)
+        label = "".join(c if c.isprintable() else json.dumps(c)[1:-1] for c in label)
+        if counts[tool.name] > 1:
+            label += f" [{seen[tool.name]}]"
+        old = json.dumps(json.loads(tool.render()), indent=2, sort_keys=True, ensure_ascii=False)
+        new = json.dumps(
+            json.loads(rewritten.render()), indent=2, sort_keys=True, ensure_ascii=False
+        )
+        parts.extend(
+            unified_diff(
+                [line + "\n" for line in old.split("\n")],
+                [line + "\n" for line in new.split("\n")],
+                fromfile=f"{label} (before)",
+                tofile=f"{label} (after)",
+            )
+        )
+    return "".join(parts)
 
 
 # --------------------------------------------------------------------- rules
