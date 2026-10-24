@@ -271,6 +271,21 @@ Counts are taken on a provider-neutral rendering of each tool. Providers wrap to
 prompt format, which adds overhead per tool that no schema change can remove. Reports always name
 the tokenizer and say whether the count is approximate. Set a default with `TOOLISM_TOKENIZER`.
 
+## Environment variables
+
+| Variable | Read in | What it does | When unset |
+| --- | --- | --- | --- |
+| `TOOLISM_TOKENIZER` | `tokenizers/__init__.py` | Default tokenizer when `-t`/`--tokenizer` isn't given (same forms as `-t`) | `tiktoken:o200k_base` |
+| `TOOLISM_DEBUG` | `cli.py`, `loaders/mcp.py` | Any non-empty value shows the full traceback instead of a one-line `error:`, and passes an `--mcp` server's stderr through to yours | One-line errors; the server's stderr is captured and hidden |
+| `NO_COLOR` | `cli.py` | If set (to any value), terminal output is not coloured | Coloured when writing to a terminal |
+| `TIKTOKEN_CACHE_DIR` | tiktoken | Where the `tiktoken:*` vocabulary is cached, so it can be reused offline | tiktoken's default cache in the system temp directory |
+| `ANTHROPIC_API_KEY` | `tokenizers/anthropic_tokenizer.py` | Needed for `-t anthropic:<model>` | `anthropic:` tokenizers fail with exit code 3 |
+| `GITHUB_STEP_SUMMARY` | `cli.py` | `toolism check` appends its Markdown summary to this file (set by GitHub Actions) | No step summary is written |
+
+A server started with `--mcp` inherits toolism's environment. The GitHub Action also reads its
+inputs as `INPUT_*` variables and uses `GITHUB_OUTPUT` and `RUNNER_TEMP`; these are set by the
+runner and don't need to be set by hand.
+
 ## How it differs
 
 - **Prompt and context compressors** (for example LLMLingua or Headroom) shrink messages, documents
