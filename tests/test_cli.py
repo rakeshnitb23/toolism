@@ -172,6 +172,30 @@ def test_unavailable_tokenizer_exits_3(runner: CliRunner, monkeypatch: pytest.Mo
     assert result.stderr == "error: cannot load o200k_base\nhint: set TIKTOKEN_CACHE_DIR\n"
 
 
+def test_debug_reraises_toolism_errors(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    from toolism.errors import FormatError
+
+    monkeypatch.setenv("TOOLISM_DEBUG", "1")
+    result = invoke(runner, "measure", "missing.json")
+    assert isinstance(result.exception, FormatError)
+
+
+def test_debug_reraises_tokenizer_unavailable(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from toolism.errors import TokenizerUnavailable
+    from toolism.tokenizers import TiktokenTokenizer
+
+    def unavailable_load(encoding: str) -> Any:
+        raise TokenizerUnavailable("cannot load o200k_base", hint="set TIKTOKEN_CACHE_DIR")
+
+    # Same stub as test_unavailable_tokenizer_exits_3: no network, no cache.
+    monkeypatch.setattr(TiktokenTokenizer, "_load", staticmethod(unavailable_load))
+    monkeypatch.setenv("TOOLISM_DEBUG", "1")
+    result = invoke(runner, "measure", MCP_TOOLS, "-t", "tiktoken:o200k_base")
+    assert isinstance(result.exception, TokenizerUnavailable)
+
+
 def test_internal_errors_are_one_line_unless_debug(
     runner: CliRunner, monkeypatch: pytest.MonkeyPatch
 ) -> None:
