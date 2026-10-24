@@ -44,3 +44,6 @@ All notable changes to this project are documented here. The format follows
   `summary-file` outputs.
 - Benchmark on 14 real tool sets (159 tools): 37.4% fewer tokens in total, median 11.3% per tool
   set, with zero equivalence counterexamples.
+
+[Unreleased]: https://github.com/rakeshnitb23/toolism/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/rakeshnitb23/toolism/releases/tag/v0.1.0
