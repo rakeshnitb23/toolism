@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `toolism rules RULE`: show a single rule by ID or name, with full details and options.
+
 - SL010 `single-allof` collapses single-branch `allOf` wrappers when their keywords can be
   merged without changing validation. Strict tools and uncertain dialect or reference scopes
   are left alone.
