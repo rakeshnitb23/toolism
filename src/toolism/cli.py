@@ -132,7 +132,15 @@ def _emit(text: str, output: Path | None) -> None:
         _write_file(output, text)
 
 
-def _load(source: str | None, mcp: str | None, timeout: float) -> ToolSet:
+def _load(
+    source: str | None, mcp: str | None, timeout: float, *, mcp_url: str | None = None
+) -> ToolSet:
+    if mcp_url is not None:
+        if source is not None or mcp is not None:
+            raise UsageProblem("give only one of SOURCE, --mcp or --mcp-url")
+        from toolism.loaders.mcp import load_mcp_http
+
+        return load_mcp_http(mcp_url, timeout=timeout)
     if source is not None and mcp is not None:
         raise UsageProblem("give either SOURCE or --mcp, not both")
     if mcp is not None:
@@ -140,7 +148,9 @@ def _load(source: str | None, mcp: str | None, timeout: float) -> ToolSet:
 
         return load_mcp_stdio(mcp, timeout=timeout)
     if source is None:
-        raise UsageProblem("missing SOURCE: a JSON file, '-' for stdin, or --mcp 'COMMAND'")
+        raise UsageProblem(
+            "missing SOURCE: a JSON file, '-' for stdin, --mcp 'COMMAND', or --mcp-url URL"
+        )
     from toolism.io import load
 
     return load(source)
@@ -178,6 +188,15 @@ McpOpt = Annotated[
 McpTimeoutOpt = Annotated[
     float,
     typer.Option("--mcp-timeout", metavar="SECONDS", help="Give up on the MCP server after this."),
+]
+McpUrlOpt = Annotated[
+    str | None,
+    typer.Option(
+        "--mcp-url",
+        metavar="URL",
+        help="Read tools from a streamable-HTTP MCP endpoint instead of a file or stdio server.",
+        show_default=False,
+    ),
 ]
 TokenizerOpt = Annotated[
     str | None,
@@ -223,6 +242,7 @@ def measure(
     source: SourceArg = None,
     mcp: McpOpt = None,
     mcp_timeout: McpTimeoutOpt = 60.0,
+    mcp_url: McpUrlOpt = None,
     tokenizer: TokenizerOpt = None,
     fmt: Annotated[
         OutputFormat, typer.Option("--format", "-f", help="Report format.")
@@ -233,7 +253,7 @@ def measure(
     from toolism.measurement import measure as measure_toolset
     from toolism.report import render_token_report
 
-    toolset = _load(source, mcp, mcp_timeout)
+    toolset = _load(source, mcp, mcp_timeout, mcp_url=mcp_url)
     report = measure_toolset(toolset, tokenizer)
     width, color = _style(sys.stdout) if output is None else (DEFAULT_WIDTH, False)
     _emit(render_token_report(report, fmt.value, width=width, color=color), output)
@@ -245,6 +265,7 @@ def slim(
     source: SourceArg = None,
     mcp: McpOpt = None,
     mcp_timeout: McpTimeoutOpt = 60.0,
+    mcp_url: McpUrlOpt = None,
     output: Annotated[
         Path | None,
         typer.Option(
@@ -324,7 +345,7 @@ def slim(
         rule_key, key, value = parse_option_assignment(assignment)
         options.setdefault(rule_key, {})[key] = value
 
-    toolset = _load(source, mcp, mcp_timeout)
+    toolset = _load(source, mcp, mcp_timeout, mcp_url=mcp_url)
     result = slim_toolset(
         toolset,
         level=level.value,
@@ -402,6 +423,7 @@ def check(
     source: SourceArg = None,
     mcp: McpOpt = None,
     mcp_timeout: McpTimeoutOpt = 60.0,
+    mcp_url: McpUrlOpt = None,
     baseline: Annotated[
         Path | None,
         typer.Option(
@@ -480,7 +502,7 @@ def check(
     if baseline is None and (pct is not None or absolute is not None):
         raise UsageProblem("--max-increase needs --baseline")
 
-    toolset = _load(source, mcp, mcp_timeout)
+    toolset = _load(source, mcp, mcp_timeout, mcp_url=mcp_url)
     report = measure_toolset(toolset, tokenizer)
 
     if update_baseline:

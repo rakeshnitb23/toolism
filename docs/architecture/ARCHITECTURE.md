@@ -101,7 +101,7 @@ models, errors         (bottom: no internal deps)
 | C9 | Measure & report | `measure.py`, `report.py` | `TokenReport`, `SlimReport`; renderers: rich table, JSON (versioned), Markdown |
 | C10 | Check | `check.py` | Baseline file, budgets, comparison → `CheckResult`, exit codes |
 | C11 | CLI | `cli.py` | `toolism measure / slim / diff / check / rules` |
-| C12 | MCP loader | `loaders/mcp.py` | Launch an MCP server over stdio and page through `tools/list` (extra: `mcp`) |
+| C12 | MCP loader | `loaders/mcp.py` | Connect over stdio or streamable HTTP and page through `tools/list` (extra: `mcp`) |
 | C13 | GitHub Action & CI | `action.yml`, `.github/workflows/*` | Composite Action wrapping `toolism check`; CI matrix; release via PyPI trusted publishing |
 | C14 | Benchmark | `bench/` | Snapshots of public MCP servers + Pydantic-style schemas; results across tokenizers |
 | C15 | Docs | `README.md`, `CONTRIBUTING.md`, `docs/` | Quickstart, rule catalogue, contributor guide |
@@ -170,6 +170,7 @@ toolism.loads(text)                                # parse a JSON string
 toolism.serialize(result.toolset)                  # back to a JSON-ready document in the input's format
 toolism.slim_tools(list_of_dicts) -> list[dict]    # one-liner for agent code
 toolism.load_mcp_stdio("npx -y @scope/server")     # tools from a live stdio MCP server (extra: mcp)
+toolism.load_mcp_http("http://127.0.0.1:8000/mcp") # tools from a streamable-HTTP MCP endpoint
 toolism.list_rules()
 ```
 
@@ -194,10 +195,11 @@ toolism diff    SOURCE [--level safe|annotations] [--enable ID]... [--disable ID
                         [--option ID.key=value]... [--output FILE]
 ```
 
-`measure`, `slim` and `check` also take `--mcp COMMAND` and `--mcp-timeout SECONDS` in place of
+`measure`, `slim` and `check` also take `--mcp COMMAND` or `--mcp-url URL`, and `--mcp-timeout SECONDS`, in place of
 `SOURCE`. `toolism --help` and `toolism <command> --help` are the authoritative reference.
 
-- `SOURCE` is a JSON file, `-` for stdin, or `--mcp "<command>"` for a live stdio server.
+- Give one input: a JSON file, `-` for stdin, `--mcp "<command>"` for a live stdio server,
+  or `--mcp-url URL` for a streamable-HTTP endpoint.
 - **Exit codes:**
   - `0` = OK
   - `1` = budget exceeded (check), or a verification rollback happened (slim `--fail-on-rollback`)
@@ -241,7 +243,7 @@ See [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md) for the reasoning behind ea
 
 ## 14. Security and privacy
 
-- toolism makes **no network calls** of its own, except when the user picks `anthropic:*` (sends definitions to Anthropic) or `--mcp` (runs a local command they supplied, which may itself use the network, e.g. `npx`).
+- toolism makes **no network calls** of its own, except when the user picks `anthropic:*` (sends definitions to Anthropic), `--mcp-url` (initializes and lists tools at the supplied endpoint), or `--mcp` (runs a local command they supplied, which may itself use the network, e.g. `npx`).
 - The default `tiktoken:*` tokenizers download their vocabulary file once, on first use, and cache it (`TIKTOKEN_CACHE_DIR`). Tool definitions never leave the machine. Fully offline: `-t heuristic`.
 - `bench/servers.toml` runs commands. It's a developer tool, never read by the library or CLI.
 

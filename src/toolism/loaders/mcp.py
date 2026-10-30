@@ -1,4 +1,4 @@
-"""Load the tools an MCP server advertises, by running it over stdio (design C12).
+"""Load the tools an MCP server advertises over stdio or streamable HTTP (design C12).
 
 Works with the ``mcp`` SDK 1.x and 2.x: pagination is feature-detected (``list_tools()`` with
 no argument, ``cursor=`` or ``params=``), as is the result's ``nextCursor``/``next_cursor``.
@@ -7,21 +7,38 @@ no argument, ``cursor=`` or ``params=``), as is the result's ``nextCursor``/``ne
 from __future__ import annotations
 
 import inspect
+import logging
 import os
 import shlex
 import sys
 import tempfile
 from collections.abc import Mapping, Sequence
+from contextvars import ContextVar
+from dataclasses import replace
 from typing import IO, Any
 
 from toolism.errors import LoaderError, MissingExtraError
 from toolism.formats import parse
-from toolism.models import ToolSet
+from toolism.models import ToolFormat, ToolSet
 
-__all__ = ["MAX_PAGES", "load_mcp_stdio", "load_mcp_stdio_async", "split_command"]
+__all__ = [
+    "MAX_PAGES",
+    "load_mcp_http",
+    "load_mcp_http_async",
+    "load_mcp_stdio",
+    "load_mcp_stdio_async",
+    "split_command",
+]
 
 MAX_PAGES = 100
 _STDERR_TAIL = 15
+_QUIET_HTTP_LOGS: ContextVar[bool] = ContextVar("toolism_quiet_mcp_http", default=False)
+
+
+class _HttpLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Transport tasks inherit this context; unrelated calls on this logger stay visible.
+        return not _QUIET_HTTP_LOGS.get()
 
 
 def _unquote(token: str) -> str:
@@ -195,5 +212,69 @@ def load_mcp_stdio(
 
     async def run() -> ToolSet:
         return await load_mcp_stdio_async(command, env=env, cwd=cwd, timeout=timeout)
+
+    return anyio.run(run)
+
+
+def _import_mcp_http() -> tuple[Any, Any, Any]:
+    try:
+        from mcp import ClientSession, types
+        from mcp.client import streamable_http
+
+        transport = getattr(streamable_http, "streamable_http_client", None)
+        if transport is None:  # older SDK 1.x spelling
+            transport = getattr(streamable_http, "streamablehttp_client", None)
+        if transport is None:
+            raise ImportError("MCP SDK has no streamable-HTTP client")
+    except ImportError:
+        error = MissingExtraError("Loading tools from a streamable-HTTP MCP server", "mcp")
+        error.hint = "pip install --upgrade 'toolism[mcp]' (an SDK with streamable HTTP is needed)"
+        raise error from None
+    return ClientSession, transport, types
+
+
+async def load_mcp_http_async(url: str, *, timeout: float = 60.0) -> ToolSet:
+    """Async variant of :func:`load_mcp_http`, for callers already inside an event loop."""
+    import anyio
+
+    client_session, transport, types = _import_mcp_http()
+    logger = logging.getLogger("mcp.client.streamable_http")
+    log_filter = _HttpLogFilter()
+    token = _QUIET_HTTP_LOGS.set(not bool(os.environ.get("TOOLISM_DEBUG")))
+    logger.addFilter(log_filter)
+    try:
+        with anyio.fail_after(timeout):
+            async with transport(url) as streams:  # noqa: SIM117
+                # SDK 1.x also yields a session-id callback; 2.x yields just the streams.
+                async with client_session(streams[0], streams[1]) as session:
+                    await session.initialize()
+                    raw = await _list_all_tools(session, types)
+    except Exception as exc:
+        leaf = _leaf(exc)
+        detail = leaf.message if isinstance(leaf, LoaderError) else _describe(exc, timeout)
+        raise LoaderError(
+            f"MCP HTTP server failed: {' '.join(detail.splitlines())}",
+            hint=(
+                "check the streamable-HTTP endpoint URL and connectivity, or increase --mcp-timeout"
+            ),
+        ) from exc
+    finally:
+        logger.removeFilter(log_filter)
+        _QUIET_HTTP_LOGS.reset(token)
+    # An empty tools/list is still MCP; automatic format detection has no item to inspect.
+    return replace(parse({"tools": [_tool_dict(tool) for tool in raw]}), format=ToolFormat.MCP)
+
+
+def load_mcp_http(url: str, *, timeout: float = 60.0) -> ToolSet:
+    """Connect to a streamable-HTTP MCP endpoint and return all its tools.
+
+    ``timeout`` bounds connection, initialization and pagination together. Requires the
+    ``mcp`` extra with a streamable-HTTP-capable SDK. No tool is executed.
+    """
+    _import_mcp_http()  # fail fast with the install hint, before touching the event loop
+    import anyio
+
+    async def run() -> ToolSet:
+        return await load_mcp_http_async(url, timeout=timeout)
 
     return anyio.run(run)

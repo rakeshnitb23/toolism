@@ -78,6 +78,29 @@ $ toolism measure --mcp "npx -y @modelcontextprotocol/server-github"
 `--mcp` runs that command exactly as your shell would, with your environment, so only point it
 at servers you would run anyway. See [SECURITY.md](SECURITY.md).
 
+For a streamable-HTTP MCP endpoint, use `--mcp-url` on `measure`, `slim` or `check`:
+
+```bash
+toolism measure --mcp-url https://your-server.example/mcp
+toolism slim --mcp-url http://127.0.0.1:8000/mcp -o tools.slim.json
+toolism check --mcp-url http://127.0.0.1:8000/mcp --max-total 10000
+```
+
+Give exactly one input: a file/stdin, `--mcp COMMAND`, or `--mcp-url URL`. The URL must be
+the server's MCP endpoint. Both live loaders initialize a session and list every page of tools;
+they do not execute tools. `--mcp-timeout SECONDS` bounds connection, initialization and listing
+together (default: 60 seconds). HTTP loading requires the `mcp` extra and an SDK with streamable
+HTTP support; upgrade with `pip install --upgrade "toolism[mcp]"` if needed. The HTTP loader
+does not configure OAuth or authentication headers, or the older standalone SSE transport.
+
+Python callers can use `toolism.load_mcp_http(url, timeout=60)`. Inside an event loop:
+
+```python
+from toolism.loaders.mcp import load_mcp_http_async
+
+tools = await load_mcp_http_async(url, timeout=60)
+```
+
 **Preview** what slimming changes, as a unified diff per changed tool:
 
 ```bash
