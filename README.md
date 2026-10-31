@@ -415,6 +415,15 @@ outputs slightly, so if tool-call accuracy matters, compare on your evals. That 
 "approximate". Use `-t anthropic:<model>` for exact Claude counts. Relative savings are stable
 across tokenizers: within about 2 percentage points in the [benchmark](https://github.com/rakeshnitb23/toolism/blob/master/bench/RESULTS.md).
 
+**Which tool fields does toolism count?** It counts a compact, provider-neutral JSON
+rendering of each function tool's `name`, optional `description`, and input schema (rendered as
+`parameters`, including MCP `inputSchema`). Top-level MCP fields such as `annotations`,
+`title`, `execution`, and `outputSchema` are not counted or slimmed; they are preserved in
+the serialized output. A `title` inside the input schema is different: it is counted and
+may be optimized. Opaque provider built-in tools are passed through uncounted. Clients and
+providers decide which tool metadata reaches the model, so toolism's reported counts need
+not equal the full model-input token cost.
+
 ## Top contributors
 
 <a href="https://github.com/rakeshnitb23/toolism/issues?q=is%3Aissue+is%3Aopen+%22Contributor+leaderboard%22+in%3Atitle">
