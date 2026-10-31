@@ -43,6 +43,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- SL008 now also drops `additionalProperties: {}`, `minLength: 0`, `minItems: 0`,
+  `minProperties: 0` and `uniqueItems: false`, which all equal the JSON Schema default.
 - `toolism diff` now reports `No changes.` on stderr when the rendered diff is empty.
 - `toolism measure` now preserves duplicate tool name warnings in table, Markdown and JSON output.
 - `--verify` no longer rewrites the schemas it checks. hypothesis-jsonschema resolves `$ref`s in
