@@ -12,10 +12,19 @@
     "expected_schema": {"type": "object", "properties": {"tags": {"type": "array"}, "x": {"type": "array"}}}
   },
   {
+    "name": "empty additionalProperties and default bounds are dropped",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"s": {"type": "string", "minLength": 0}, "a": {"type": "array", "minItems": 0, "uniqueItems": false}, "o": {"type": "object", "minProperties": 0, "additionalProperties": {}}}}},
+    "expected_schema": {"type": "object", "properties": {"s": {"type": "string"}, "a": {"type": "array"}, "o": {"type": "object"}}}
+  },
+  {
+    "name": "non-default bounds and uniqueItems are kept",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"s": {"type": "string", "minLength": 1}, "a": {"type": "array", "minItems": 1, "uniqueItems": true}, "o": {"type": "object", "minProperties": 1, "additionalProperties": false}}}}
+  },
+  {
     "name": "strict tools keep required and additionalProperties",
     "strict": true,
-    "tool": {"name": "t", "schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": false, "description": ""}},
-    "expected_schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": false}
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": false, "minLength": 0, "minItems": 0, "minProperties": 0, "uniqueItems": false, "description": ""}},
+    "expected_schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": false, "minLength": 0, "minItems": 0, "minProperties": 0, "uniqueItems": false}
   },
   {
     "name": "meaningful values are kept",

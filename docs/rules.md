@@ -117,9 +117,10 @@ cost ~10% of normal input). Off by default because tool order can be intentional
 
 Each of these is exactly the default and changes nothing: `required: []`,
 `description: ""`, empty `$defs`, `additionalProperties: true` (and friends),
-`items: {}` / `items: true`. `type: ["x"]` becomes `"x"`. `properties: {}` is kept on
-purpose — OpenAI rejects object schemas without it. Strict tools keep `required` and
-`additional*` keywords.
+`additionalProperties: {}`, `minLength: 0`, `minItems: 0`, `minProperties: 0`,
+`uniqueItems: false`, `items: {}` / `items: true`. `type: ["x"]` becomes `"x"`.
+`properties: {}` is kept on purpose — OpenAI rejects object schemas without it. Strict
+tools keep `required` and `additional*` keywords.
 
 - Safety: `safe` — Validation-equivalent; removes only provably redundant information.
 - Enabled by: default
