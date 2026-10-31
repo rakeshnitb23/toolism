@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Exact `gemini:<model>` token counts via Google's `count_tokens` API.
 - Opt-in persistent Anthropic token-count caching via `TOOLISM_CACHE_DIR`, including baseline,
   probe, marginal and ordered aggregate counts. Bounded, checksummed snapshots use atomic
   replacement and fixed 24-hour generations; README documents clearing and Actions cache use.

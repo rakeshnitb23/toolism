@@ -31,6 +31,7 @@ pip install toolism                 # CLI + Python API
 pip install "toolism[verify]"       # + equivalence verification (hypothesis-jsonschema)
 pip install "toolism[mcp]"          # + read tools straight from an MCP server
 pip install "toolism[all]"          # everything, incl. Anthropic's exact token counter
+pip install "toolism[gemini]"       # + Gemini's exact token counter
 ```
 
 ## 30-second tour
@@ -263,6 +264,7 @@ The hook runs whenever a matching file is staged. Create the baseline once with
 | `tiktoken:o200k_base` (default) | OpenAI models; a good approximation elsewhere |
 | `heuristic` | offline, no dependencies; within ~3% of o200k on the benchmark |
 | `anthropic:<model>` | provider-reported counts from Anthropic's `count_tokens` API (needs `ANTHROPIC_API_KEY`) |
+| `gemini:<model>` | exact counts from Gemini's `count_tokens` API (needs `GEMINI_API_KEY`) |
 
 ### Persistent API count cache
 
@@ -379,8 +381,9 @@ outputs slightly, so if tool-call accuracy matters, compare on your evals. That 
 `--level annotations`.
 
 **Is tiktoken accurate for Claude or Gemini?** Not exactly, which is why reports say
-"approximate". Use `-t anthropic:<model>` for exact Claude counts. Relative savings are stable
-across tokenizers: within about 2 percentage points in the [benchmark](bench/RESULTS.md).
+"approximate". Use `-t anthropic:<model>` for exact Claude counts or `-t gemini:<model>` for
+Gemini. Relative savings are stable across tokenizers: within about 2 percentage points in the
+[benchmark](bench/RESULTS.md).
 
 ## Top contributors
 
