@@ -527,17 +527,26 @@ def check(
 @app.command()
 @_handle_errors
 def rules(
+    rule: Annotated[
+        str | None,
+        typer.Argument(
+            metavar="[RULE]",
+            help="Optional rule ID (e.g. 'SL004') or name (e.g. 'inline-defs') to inspect.",
+        ),
+    ] = None,
     fmt: Annotated[
         OutputFormat,
         typer.Option("--format", "-f", help="table, json, or markdown (the docs/rules.md page)."),
     ] = OutputFormat.table,
     output: OutputOpt = None,
 ) -> None:
-    """List the slimming rules, their safety level and options."""
+    """List the slimming rules, or inspect a single rule in detail."""
     from toolism.report import render_rules
+    from toolism.rules import get_rule
 
+    chosen = [get_rule(rule)] if rule is not None else None
     width, color = _style(sys.stdout) if output is None else (DEFAULT_WIDTH, False)
-    _emit(render_rules(fmt.value, width=width, color=color), output)
+    _emit(render_rules(fmt.value, rules=chosen, width=width, color=color), output)
 
 
 def _utf8_streams() -> None:

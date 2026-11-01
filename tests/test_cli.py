@@ -468,6 +468,47 @@ def test_rules_formats(runner: CliRunner, tmp_path: Path) -> None:
     assert out.read_text(encoding="utf-8").startswith("# Rules\n")
 
 
+def test_rules_single_rule_inspection(runner: CliRunner) -> None:
+    # Look up by ID
+    res_id = invoke(runner, "rules", "SL004")
+    assert res_id.exit_code == 0
+    assert "SL004" in res_id.stdout
+    assert "inline-defs" in res_id.stdout
+    assert "Safety" in res_id.stdout
+    assert "Enabled by" in res_id.stdout
+
+    # Look up by name
+    res_name = invoke(runner, "rules", "inline-defs")
+    assert res_name.exit_code == 0
+    assert "SL004" in res_name.stdout
+    assert "inline-defs" in res_name.stdout
+
+    # Options table rendered when rule has options
+    res_options = invoke(runner, "rules", "SL101")
+    assert res_options.exit_code == 0
+    assert "Options for SL101" in res_options.stdout
+    assert "max_chars" in res_options.stdout
+
+    # JSON format for single rule
+    json_res = invoke(runner, "rules", "SL004", "-f", "json")
+    assert json_res.exit_code == 0
+    d = json.loads(json_res.stdout)
+    assert d["kind"] == "rules"
+    assert len(d["rules"]) == 1
+    assert d["rules"][0]["id"] == "SL004"
+
+    # Markdown format for single rule
+    md_res = invoke(runner, "rules", "SL004", "-f", "markdown")
+    assert md_res.exit_code == 0
+    assert "## SL004 inline-defs" in md_res.stdout
+
+    # Unknown rule error and hint
+    unknown = invoke(runner, "rules", "unknown-rule")
+    assert unknown.exit_code == 2
+    assert "error: unknown rule" in unknown.stderr
+    assert "hint: run 'toolism rules'" in unknown.stderr
+
+
 # ---------------------------------------------------------------- MCP and IO
 
 

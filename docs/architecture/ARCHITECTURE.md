@@ -191,7 +191,7 @@ toolism slim    SOURCE [--output FILE] [--level safe|annotations] [--enable ID].
 toolism check   SOURCE --baseline FILE [--max-increase 10%|500] [--max-total N] [--max-tool N]
                         [--update-baseline] [--allow-tokenizer-change] [--tokenizer T]
                         [--format table|json|markdown] [--output FILE] [--summary-md FILE]
-toolism rules   [--format table|json|markdown] [--output FILE]
+toolism rules   [RULE] [--format table|json|markdown] [--output FILE]
 
 toolism diff    [SOURCE] [--level safe|annotations] [--enable ID]... [--disable ID]...
                         [--option ID.key=value]... [--output FILE] [--exit-code]

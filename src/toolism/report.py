@@ -424,6 +424,30 @@ def render_rules(
         return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
     if fmt == "markdown":
         return _rules_markdown(chosen)
+    if rules is not None and len(chosen) == 1:
+        r = chosen[0]
+        table = Table(title=f"{r.id} ({r.name})", title_justify="left", show_header=False)
+        table.add_column("Field", style="bold")
+        table.add_column("Value")
+        table.add_row("Summary", r.summary)
+        doc = _rule_doc(r)
+        if doc and doc != r.summary:
+            table.add_row("Description", doc)
+        table.add_row("Safety", f"{r.safety.label} ? {_SAFETY_TEXT[r.safety]}")
+        table.add_row("Enabled by", _enabled_by(r))
+        if r.reorders:
+            table.add_row("Reorders", "Reorders tools; applied after all content rules.")
+        elements: list[Any] = [table]
+        if r.option_specs:
+            opt_table = Table(title=f"Options for {r.id}", title_justify="left")
+            opt_table.add_column("Option", style="bold")
+            opt_table.add_column("Type")
+            opt_table.add_column("Default")
+            opt_table.add_column("Meaning")
+            for name, spec in r.option_specs.items():
+                opt_table.add_row(name, spec.type.__name__, json.dumps(spec.default), spec.help)
+            elements.append(opt_table)
+        return _console_render(elements, width, color)
     table = Table(title="toolism rules", title_justify="left")
     table.add_column("ID")
     table.add_column("Name")
