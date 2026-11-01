@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from pathlib import Path
 from typing import Any
@@ -59,6 +60,9 @@ def test_read_stdio_servers_in_file_order(tmp_path: Path) -> None:
         ({"url": "https://example.com/mcp"}, "remote server"),
         ({"type": "http", "url": "https://example.com/mcp"}, "remote server"),
         ({"type": "sse"}, "remote server"),
+        ({"url": "https://example.com/mcp", "command": "npx"}, "remote server"),
+        ({"type": "http", "command": "npx"}, "remote server"),
+        ({"type": [], "command": "npx"}, "'type' must be a string"),
         ({"args": ["x"]}, "no 'command'"),
         ({"command": "  "}, "no 'command'"),
         ({"command": "npx", "args": "-y server"}, "'args' must be a list of strings"),
@@ -128,7 +132,7 @@ def test_load_keeps_going_when_a_server_fails(
     def fake_load(command: list[str], *, env: Any = None, timeout: float = 60.0) -> ToolSet:
         calls.append((command, dict(env or {}), timeout))
         if command[0] == "broken":
-            raise LoaderError("MCP server 'broken' failed: command not found (broken)")
+            raise LoaderError(f"MCP server {shlex.join(command)!r} failed: command not found")
         return _toolset(f"{command[0]}_tool")
 
     monkeypatch.setattr("toolism.loaders.mcp.load_mcp_stdio", fake_load)
@@ -139,12 +143,46 @@ def test_load_keeps_going_when_a_server_fails(
         ("two", ["two_tool"]),
     ]
     assert not_measured == [
-        ("broken", "MCP server 'broken' failed: command not found (broken)"),
+        ("broken", "failed: command not found"),
         ("off", "skipped: disabled"),
     ]
     assert calls[0] == (["one", "--flag"], {"TOKEN": "secret-value"}, 5)
     assert [c[0][0] for c in calls] == ["one", "broken", "two"]  # disabled is never started
     assert "secret-value" not in repr(not_measured)
+
+
+def test_failure_reasons_hide_the_command_line_and_env_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _write(
+        tmp_path,
+        {
+            "mcpServers": {
+                "db": {
+                    "command": "npx",
+                    "args": ["server-postgres", "postgresql://user:hunter2-arg@db/app"],
+                    "env": {"API_KEY": "sk-secret-env-value", "PASSWORD": "hunter2", "DEBUG": "1"},
+                }
+            }
+        },
+    )
+
+    def failing(command: list[str], *, env: Any = None, **_: Any) -> ToolSet:
+        # Like the real loader: the command line in the message, plus a server error echoing a key.
+        raise LoaderError(
+            f"MCP server {shlex.join(command)!r} failed: "
+            f"McpError: invalid key {env['API_KEY']} (debug={env['DEBUG']}); "
+            f"cannot connect to {command[2]} with password {env['PASSWORD']}"
+        )
+
+    monkeypatch.setattr("toolism.loaders.mcp.load_mcp_stdio", failing)
+    _, not_measured = mcp_config.load_mcp_config(path)
+    assert not_measured == [
+        (
+            "db",
+            "failed: McpError: invalid key *** (debug=1); cannot connect to *** with password ***",
+        )
+    ]
 
 
 def test_load_stops_on_a_missing_extra(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -177,4 +215,4 @@ def test_load_live_servers_from_a_config(tmp_path: Path) -> None:
     assert [name for name, _ in loaded] == ["demo"]
     assert [t.name for t in loaded[0][1].tools] == ["create_contact", "search_contacts"]
     assert [name for name, _ in not_measured] == ["missing"]
-    assert "command not found" in not_measured[0][1]
+    assert not_measured[0][1].startswith("failed: command not found")

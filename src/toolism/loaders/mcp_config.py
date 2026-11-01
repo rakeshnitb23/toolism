@@ -6,13 +6,15 @@ Claude Desktop, Cursor, Claude Code and others list their servers in the same sh
 
 Each stdio server is started with :func:`toolism.loaders.mcp.load_mcp_stdio`. Remote servers
 (``url``) and entries marked ``"disabled": true`` are skipped, and one server failing does not
-stop the others. ``env`` values are passed to the server and never appear in any message.
+stop the others. Failure reasons leave out the server's command line and mask its ``env``
+and argument values.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -24,6 +26,7 @@ from toolism.models import ToolSet
 __all__ = ["ConfigServer", "load_mcp_config", "read_mcp_config"]
 
 _REMOTE_TYPES = frozenset({"http", "sse", "streamable-http", "streamableHttp"})
+_MIN_MASKED = 3  # "1" or "-y" would mask ordinary text; any real secret is longer
 
 
 @dataclass(frozen=True)
@@ -47,9 +50,12 @@ def _server(name: str, entry: Any) -> ConfigServer:
         return ConfigServer(name, skip="not a JSON object")
     if entry.get("disabled") is True:
         return ConfigServer(name, skip="disabled")
-    command = entry.get("command")
-    if command is None and ("url" in entry or entry.get("type") in _REMOTE_TYPES):
+    kind = entry.get("type", "stdio")
+    if not isinstance(kind, str):
+        return ConfigServer(name, skip="'type' must be a string")
+    if "url" in entry or kind in _REMOTE_TYPES:
         return ConfigServer(name, skip="remote server (url); only stdio servers are supported")
+    command = entry.get("command")
     if not isinstance(command, str) or not command.strip():
         return ConfigServer(name, skip="no 'command' to start it with")
     args = _string_list(entry.get("args", []))
@@ -59,6 +65,21 @@ def _server(name: str, entry: Any) -> ConfigServer:
     if not isinstance(env, dict) or not all(isinstance(v, str) for v in env.values()):
         return ConfigServer(name, skip="'env' must map names to strings")
     return ConfigServer(name, argv=(command, *args), env=env)
+
+
+def _reason(exc: LoaderError | FormatError, server: ConfigServer) -> str:
+    """The error without the server's command line, with its ``env`` and argument values masked.
+
+    The row already names the server. The rest of the text can come from the server itself,
+    which may echo a value back (a rejected API key, a connection string), so every value of
+    ``_MIN_MASKED`` or more characters is masked wherever it appears, longest first.
+    """
+    text = exc.message.removeprefix(f"MCP server {shlex.join(server.argv)!r} ")
+    values = {*server.env.values(), *server.argv[1:]}
+    for value in sorted(values, key=len, reverse=True):
+        if len(value) >= _MIN_MASKED:
+            text = text.replace(value, "***")
+    return text
 
 
 def read_mcp_config(path: str | os.PathLike[str]) -> tuple[ConfigServer, ...]:
@@ -114,5 +135,5 @@ def load_mcp_config(
                 (server.name, load_mcp_stdio(list(server.argv), env=server.env, timeout=timeout))
             )
         except (LoaderError, FormatError) as exc:  # a missing mcp extra still stops the run
-            not_measured.append((server.name, exc.message))
+            not_measured.append((server.name, _reason(exc, server)))
     return loaded, not_measured

@@ -65,8 +65,9 @@ class SourceCount:
 class SourcesReport:
     """Token cost of several tool sources that a model sees together.
 
+    Each source's ``tokens`` is the sum of its tools' own costs, as in :class:`TokenReport`.
     ``total`` counts every source's tools as one list, which is what the model receives, so it
-    can differ slightly from the sum of the per-source counts.
+    also holds the once-per-request overhead some tokenizers add (``anthropic:``).
     """
 
     tokenizer: str
@@ -80,6 +81,45 @@ class SourcesReport:
     warnings: tuple[str, ...] = ()
 
 
+def _unique_names(
+    sources: Sequence[tuple[str, Sequence[ToolDef]]],
+) -> tuple[list[ToolDef], list[str]]:
+    """All the sources' tools as one list, with names made unique so it can be counted as one.
+
+    Providers such as Anthropic reject a request whose tool names repeat, and clients rename
+    clashing tools anyway (Claude Code sends ``mcp__<server>__<tool>``). A suffix changes the
+    count by a token or two, which is far less than the clash itself would distort it.
+    """
+    from toolism.tokenizers.anthropic_tokenizer import anthropic_tool_name
+
+    # Compared as Anthropic receives them, so ``fs.read`` and ``fs_read`` clash too.
+    owners: dict[str, list[str]] = {}
+    for name, tools in sources:
+        for tool in tools:
+            owners.setdefault(anthropic_tool_name(tool.name), []).append(name)
+    combined: list[ToolDef] = []
+    taken: set[str] = set()
+    for _, tools in sources:
+        for tool in tools:
+            wire = anthropic_tool_name(tool.name)
+            if wire not in taken:
+                taken.add(wire)
+                combined.append(tool)
+                continue
+            n = 2
+            while f"{wire[:120]}_{n}" in taken:
+                n += 1
+            unique = f"{wire[:120]}_{n}"
+            taken.add(unique)
+            combined.append(tool.replace(name=unique))
+    warnings = [
+        f"tool name {tool!r} is used by several servers ({', '.join(dict.fromkeys(names))})"
+        for tool, names in owners.items()
+        if len(set(names)) > 1
+    ]
+    return combined, warnings
+
+
 def measure_sources(
     sources: Sequence[tuple[str, ToolSet]],
     tokenizer: str | Tokenizer | None = None,
@@ -91,23 +131,22 @@ def measure_sources(
     ``not_measured`` is passed through to the report so it can list sources that never loaded.
     """
     counter = get_tokenizer(tokenizer)
-    counts: list[SourceCount] = []
-    combined: list[ToolDef] = []
-    uncounted: list[str] = []
-    warnings: list[str] = []
+    function_tools = [(name, toolset.function_tools()) for name, toolset in sources]
+    combined, warnings = _unique_names(function_tools)
     for name, toolset in sources:
-        function_tools = toolset.function_tools()
-        counts.append(SourceCount(name, counter.count_tools(function_tools), len(function_tools)))
-        combined.extend(function_tools)
-        uncounted.extend(f"{name}: {t.name}" for t in toolset.tools if t.opaque)
         warnings.extend(f"{name}: {w}" for w in toolset.warnings)
     return SourcesReport(
         tokenizer=counter.name,
         approximate=counter.approximate,
         total=counter.count_tools(combined),
         tool_count=len(combined),
-        sources=tuple(counts),
+        sources=tuple(
+            SourceCount(name, sum(counter.count_tool(t) for t in tools), len(tools))
+            for name, tools in function_tools
+        ),
         not_measured=tuple(not_measured),
-        uncounted=tuple(uncounted),
+        uncounted=tuple(
+            f"{name}: {t.name}" for name, toolset in sources for t in toolset.tools if t.opaque
+        ),
         warnings=tuple(warnings),
     )

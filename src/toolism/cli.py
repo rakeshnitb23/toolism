@@ -19,7 +19,7 @@ from typing import Annotated, Any, NoReturn, TypeVar
 import typer
 
 from toolism.__about__ import __version__
-from toolism.errors import TokenizerUnavailable, ToolismError
+from toolism.errors import LoaderError, TokenizerUnavailable, ToolismError
 from toolism.models import ToolSet
 
 __all__ = ["app", "main"]
@@ -266,7 +266,6 @@ def _measure_mcp_config(
     width: int,
     color: bool,
 ) -> None:
-    from toolism.errors import LoaderError
     from toolism.loaders.mcp_config import load_mcp_config
     from toolism.measurement import measure_sources
     from toolism.report import render_sources_report
@@ -276,8 +275,12 @@ def _measure_mcp_config(
     loaded, not_measured = load_mcp_config(path, timeout=timeout)
     report = measure_sources(loaded, counter, not_measured=not_measured)
     _emit(render_sources_report(report, fmt.value, width=width, color=color), output)
+    failed = any(not reason.startswith("skipped:") for _, reason in not_measured)
+    hint = "set TOOLISM_DEBUG=1 to see the servers' stderr" if failed else None
     if not loaded:  # the report above says why each server was not measured
-        raise LoaderError(f"no server in {path} could be measured")
+        raise LoaderError(f"no server in {path} could be measured", hint=hint)
+    if hint:
+        typer.echo(f"hint: {hint}", err=True)
 
 
 @app.command()

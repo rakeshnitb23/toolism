@@ -11,8 +11,8 @@ scripts and dashboards. The reports are versioned: every one carries
 - Fields may be **added**, but never removed or renamed.
 - A removal or rename means a version bump, so a consumer written against
   version 1 keeps parsing.
-- `kind` tells you which top-level shape to expect: `measure`, `slim`,
-  or `check`.
+- `kind` tells you which top-level shape to expect: `measure`,
+  `measure_sources`, `slim`, or `check`.
 
 Token counts are integers everywhere. Only averages and percentages are
 floats, rounded to 2 decimals. Percentages in `measure` are per-tool shares
@@ -74,6 +74,64 @@ Top-level fields:
 | `tools` | One entry per tool: `name`, `tokens`, `percent` (share of the total). Sorted by tokens descending in the table/markdown renderings; the JSON list follows the report order. |
 | `uncounted` | Provider built-ins that were not counted, by name. |
 | `warnings` | Non-fatal warnings from counting. |
+
+## `measure_sources`
+
+`measure --mcp-config` measures every server in an MCP client config and
+reports one entry per server instead of one per tool:
+
+```sh
+toolism measure --mcp-config ~/.cursor/mcp.json -f json
+```
+
+Example (abridged):
+
+```json
+{
+  "toolism_report": 1,
+  "kind": "measure_sources",
+  "tokenizer": "tiktoken:o200k_base",
+  "approximate": true,
+  "total_tokens": 4210,
+  "tool_count": 31,
+  "sources": [
+    {
+      "name": "github",
+      "tokens": 3650,
+      "tool_count": 26,
+      "percent": 86.7
+    },
+    {
+      "name": "filesystem",
+      "tokens": 560,
+      "tool_count": 5,
+      "percent": 13.3
+    }
+  ],
+  "not_measured": [
+    {
+      "name": "linear",
+      "reason": "skipped: remote server (url); only stdio servers are supported"
+    }
+  ],
+  "uncounted": [],
+  "warnings": []
+}
+```
+
+Top-level fields:
+
+| Field | Meaning |
+| --- | --- |
+| `toolism_report` | Format version, currently `1`. |
+| `kind` | Always `"measure_sources"` here. |
+| `tokenizer`, `approximate` | As in `measure`. |
+| `total_tokens` | All the servers' tools counted as one list, the way the model receives them. With `anthropic:` tokenizers it also holds the once-per-request tool overhead, so it can be more than the sum of the `sources` counts. |
+| `tool_count` | Number of tools counted, across all servers. |
+| `sources` | One entry per measured server, in config order: `name`, `tokens` (the sum of its tools' costs, as in `measure`), `tool_count`, `percent` (share of `total_tokens`). |
+| `not_measured` | Servers that were skipped or failed: `name`, `reason`. The reason never includes the server's command line, and `env` and argument values of 3 or more characters are masked. |
+| `uncounted` | Provider built-ins that were not counted, as `"<server>: <tool>"`. |
+| `warnings` | Non-fatal warnings, such as a tool name used by several servers. |
 
 ## `slim`
 

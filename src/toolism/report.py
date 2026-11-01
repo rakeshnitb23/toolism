@@ -136,7 +136,7 @@ def render_token_report(
 def sources_report_to_dict(report: SourcesReport) -> dict[str, Any]:
     return {
         "toolism_report": REPORT_VERSION,
-        "kind": "measure",
+        "kind": "measure_sources",
         "tokenizer": report.tokenizer,
         "approximate": report.approximate,
         "total_tokens": report.total,

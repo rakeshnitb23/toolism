@@ -89,8 +89,8 @@ $ toolism measure --mcp-config ~/.cursor/mcp.json
 stdio server in turn with its `command`, `args` and `env`. `--mcp-timeout` applies to each server.
 The total counts all the servers' tools as one list, the way the model receives them. Remote
 (`url`) and disabled entries are skipped, and a server that fails is listed without stopping the
-rest; the command exits 2 only if no server could be measured. `env` values are passed as
-written, so `${VAR}` placeholders are not expanded.
+rest. It exits 0 when at least one server was measured and 2 when none could be. `env` values
+are passed as written, so `${VAR}` placeholders are not expanded.
 
 **Preview** what slimming changes, as a unified diff per changed tool:
 

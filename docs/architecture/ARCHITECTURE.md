@@ -203,7 +203,7 @@ toolism diff    [SOURCE] [--level safe|annotations] [--enable ID]... [--disable 
 `SOURCE`. `toolism --help` and `toolism <command> --help` are the authoritative reference.
 
 - `SOURCE` is a JSON file, `-` for stdin, or `--mcp "<command>"` for a live stdio server.
-- `measure --mcp-config FILE` reads the `mcpServers` object of an MCP client config and starts each stdio server in turn (`--mcp-timeout` applies per server). It reports one row per server and a total counted over all their tools as one list. Remote (`url`) and `"disabled": true` entries are skipped; a failing server is reported and the rest still run. It exits `2` only when no server could be measured.
+- `measure --mcp-config FILE` reads the `mcpServers` object of an MCP client config and starts each stdio server in turn (`--mcp-timeout` applies per server). It reports one row per server and a total counted over all their tools as one list. Remote (`url`) and `"disabled": true` entries are skipped; a failing server is reported and the rest still run. It exits `0` when at least one server was measured and `2` when none could be.
 - **Exit codes:**
   - `0` = OK
   - `1` = budget exceeded (check), a verification rollback happened (slim `--fail-on-rollback`), or differences found (diff `--exit-code`)

@@ -1003,7 +1003,7 @@ def _fake_servers(monkeypatch: pytest.MonkeyPatch, failing: tuple[str, ...] = ()
     def fake_load(command: list[str], **_: Any) -> Any:
         started.append(command[0])
         if command[0] in failing:
-            raise LoaderError(f"MCP server {command[0]!r} failed: command not found")
+            raise LoaderError(f"MCP server {command[0]!r} failed: command not found")  # like mcp.py
         return parse(
             {
                 "tools": [
@@ -1041,8 +1041,11 @@ def test_measure_mcp_config_reports_each_server_and_the_total(
     data = json.loads(result.stdout)
     assert [s["name"] for s in data["sources"]] == ["github", "files"]
     assert data["tool_count"] == 4
+    assert data["kind"] == "measure_sources"
+    assert data["not_measured"][0] == {"name": "broken", "reason": "failed: command not found"}
     assert [n["name"] for n in data["not_measured"]] == ["broken", "remote"]
     assert "secret-value" not in result.output
+    assert result.stderr == "hint: set TOOLISM_DEBUG=1 to see the servers' stderr\n"
 
     table = invoke(runner, "measure", "--mcp-config", config)
     assert table.exit_code == 0, table.output
@@ -1058,7 +1061,10 @@ def test_measure_mcp_config_exits_2_when_no_server_is_measured(
     result = invoke(runner, "measure", "--mcp-config", config)
     assert result.exit_code == 2
     assert "Not measured: broken" in result.stdout
-    assert result.stderr.startswith(f"error: no server in {config} could be measured")
+    assert result.stderr == (
+        f"error: no server in {config} could be measured\n"
+        "hint: set TOOLISM_DEBUG=1 to see the servers' stderr\n"
+    )
 
 
 @pytest.mark.parametrize("extra", [("tools.json",), ("--mcp", "server")])
