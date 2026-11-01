@@ -989,3 +989,34 @@ def test_architecture_doc_lists_every_cli_option() -> None:
             for opt in param.opts:
                 if opt.startswith("--") and opt != "--help":
                     assert opt in doc, f"toolism {name} {opt} is missing from ARCHITECTURE.md"
+
+
+@pytest.mark.parametrize("fmt", ["table", "markdown", "json"])
+def test_measure_with_price(runner: CliRunner, fmt: str) -> None:
+    result = invoke(runner, "measure", MCP_TOOLS, "--price", "3", "-f", fmt)
+    assert result.exit_code == 0, result.output
+    if fmt == "json":
+        data = json.loads(result.stdout)
+        assert data["cost"]["usd_per_million_input_tokens"] == 3
+        assert data["cost"]["usd_per_1000_requests"] == pytest.approx(
+            data["total_tokens"] * 3 / 1000
+        )
+    else:
+        assert "per million input tokens" in result.stdout
+        assert "per 1,000 requests" in result.stdout
+
+
+@pytest.mark.parametrize("price", ["0", "-1", "nan", "inf", "-inf"])
+def test_measure_rejects_invalid_price_before_loading(runner: CliRunner, price: str) -> None:
+    result = invoke(runner, "measure", "missing.json", "--price", price)
+    assert result.exit_code == 2
+    assert "--price must be a finite number greater than zero" in result.stderr
+    assert "cannot read" not in result.stderr
+
+
+def test_measure_price_overflow_is_a_usage_error(runner: CliRunner) -> None:
+    tool = {"tools": [{"name": "long", "description": "x" * 30000, "inputSchema": {}}]}
+    result = invoke(runner, "measure", "-", "--price", "1e308", input=json.dumps(tool))
+    assert result.exit_code == 2
+    assert "--price is too large for this token count" in result.stderr
+    assert "internal error" not in result.stderr

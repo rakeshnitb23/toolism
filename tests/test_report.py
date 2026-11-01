@@ -188,3 +188,42 @@ def test_docs_rules_md_is_up_to_date() -> None:
     assert page.read_text(encoding="utf-8") == render_rules("markdown"), (
         "docs/rules.md is stale: run `uv run toolism rules -f markdown -o docs/rules.md`"
     )
+
+
+@pytest.mark.parametrize("fmt", ["table", "markdown", "json"])
+def test_measure_price_estimate(fmt: str) -> None:
+    report = TokenReport("heuristic", True, 1250, 1, (ToolCount("search", 1250),))
+    original = render_token_report(report, fmt)  # type: ignore[arg-type]
+    priced = render_token_report(report, fmt, price=3.0)  # type: ignore[arg-type]
+    if fmt == "json":
+        data = json.loads(priced)
+        assert data.pop("cost") == {
+            "usd_per_million_input_tokens": 3.0,
+            "usd_per_1000_requests": 3.75,
+        }
+        assert data == json.loads(original)
+    else:
+        assert "At $3.00 per million input tokens: $3.75 per 1,000 requests" in priced
+        assert priced.startswith(original.rstrip())
+
+
+@pytest.mark.parametrize("price", [0, -1, float("nan"), float("inf"), -float("inf")])
+def test_measure_price_rejects_invalid_prices(price: float) -> None:
+    report = measure(TOOLS, H)
+    with pytest.raises(ValueError, match="finite number greater than zero"):
+        render_token_report(report, price=price)
+
+
+def test_empty_measure_cost_and_small_prices() -> None:
+    empty = measure(parse([]), H)
+    assert token_report_to_dict(empty, price=3)["cost"]["usd_per_1000_requests"] == 0
+    report = TokenReport("heuristic", True, 1250, 1, (ToolCount("search", 1250),))
+    cost = token_report_to_dict(report, price=0.0001)["cost"]
+    assert cost["usd_per_1000_requests"] == 0.000125
+    assert "cost" not in token_report_to_dict(report)
+
+
+def test_measure_cost_rejects_overflow() -> None:
+    report = TokenReport("heuristic", True, 10000, 1, (ToolCount("search", 10000),))
+    with pytest.raises(ValueError, match="too large"):
+        token_report_to_dict(report, price=1e308)

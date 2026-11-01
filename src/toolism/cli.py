@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import math
 import os
 import shutil
 import sys
@@ -228,15 +229,25 @@ def measure(
         OutputFormat, typer.Option("--format", "-f", help="Report format.")
     ] = OutputFormat.table,
     output: OutputOpt = None,
+    price: Annotated[
+        float | None,
+        typer.Option("--price", metavar="USD_PER_MTOK", help="USD per million input tokens."),
+    ] = None,
 ) -> None:
     """Count the tokens each tool definition costs."""
     from toolism.measurement import measure as measure_toolset
     from toolism.report import render_token_report
 
+    if price is not None and (not math.isfinite(price) or price <= 0):
+        raise UsageProblem("--price must be a finite number greater than zero")
     toolset = _load(source, mcp, mcp_timeout)
     report = measure_toolset(toolset, tokenizer)
     width, color = _style(sys.stdout) if output is None else (DEFAULT_WIDTH, False)
-    _emit(render_token_report(report, fmt.value, width=width, color=color), output)
+    try:
+        rendered = render_token_report(report, fmt.value, width=width, color=color, price=price)
+    except ValueError as exc:
+        raise UsageProblem(str(exc)) from None
+    _emit(rendered, output)
 
 
 @app.command()
