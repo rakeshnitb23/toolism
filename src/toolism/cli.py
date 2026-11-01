@@ -222,6 +222,18 @@ def _root(
 def measure(
     source: SourceArg = None,
     mcp: McpOpt = None,
+    mcp_config: Annotated[
+        Path | None,
+        typer.Option(
+            "--mcp-config",
+            metavar="FILE",
+            help=(
+                "Start every stdio server in an MCP client config (claude_desktop_config.json, "
+                ".cursor/mcp.json, .mcp.json) and report each one plus the total."
+            ),
+            show_default=False,
+        ),
+    ] = None,
     mcp_timeout: McpTimeoutOpt = 60.0,
     tokenizer: TokenizerOpt = None,
     fmt: Annotated[
@@ -230,13 +242,42 @@ def measure(
     output: OutputOpt = None,
 ) -> None:
     """Count the tokens each tool definition costs."""
+    width, color = _style(sys.stdout) if output is None else (DEFAULT_WIDTH, False)
+    if mcp_config is not None:
+        if source is not None or mcp is not None:
+            raise UsageProblem("give only one of SOURCE, --mcp or --mcp-config")
+        _measure_mcp_config(mcp_config, mcp_timeout, tokenizer, fmt, output, width, color)
+        return
+
     from toolism.measurement import measure as measure_toolset
     from toolism.report import render_token_report
 
     toolset = _load(source, mcp, mcp_timeout)
     report = measure_toolset(toolset, tokenizer)
-    width, color = _style(sys.stdout) if output is None else (DEFAULT_WIDTH, False)
     _emit(render_token_report(report, fmt.value, width=width, color=color), output)
+
+
+def _measure_mcp_config(
+    path: Path,
+    timeout: float,
+    tokenizer: str | None,
+    fmt: OutputFormat,
+    output: Path | None,
+    width: int,
+    color: bool,
+) -> None:
+    from toolism.errors import LoaderError
+    from toolism.loaders.mcp_config import load_mcp_config
+    from toolism.measurement import measure_sources
+    from toolism.report import render_sources_report
+    from toolism.tokenizers import get_tokenizer
+
+    counter = get_tokenizer(tokenizer)  # a bad --tokenizer fails before any server starts
+    loaded, not_measured = load_mcp_config(path, timeout=timeout)
+    report = measure_sources(loaded, counter, not_measured=not_measured)
+    _emit(render_sources_report(report, fmt.value, width=width, color=color), output)
+    if not loaded:  # the report above says why each server was not measured
+        raise LoaderError(f"no server in {path} could be measured")
 
 
 @app.command()

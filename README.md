@@ -78,6 +78,20 @@ $ toolism measure --mcp "npx -y @modelcontextprotocol/server-github"
 `--mcp` runs that command exactly as your shell would, with your environment, so only point it
 at servers you would run anyway. See [SECURITY.md](https://github.com/rakeshnitb23/toolism/blob/master/SECURITY.md).
 
+Or measure every server your MCP client already lists, with one row per server and a total:
+
+```console
+$ toolism measure --mcp-config ~/.cursor/mcp.json
+```
+
+`--mcp-config` reads the `mcpServers` object of a client config such as
+`claude_desktop_config.json`, `.cursor/mcp.json` or a Claude Code `.mcp.json`, and starts each
+stdio server in turn with its `command`, `args` and `env`. `--mcp-timeout` applies to each server.
+The total counts all the servers' tools as one list, the way the model receives them. Remote
+(`url`) and disabled entries are skipped, and a server that fails is listed without stopping the
+rest; the command exits 2 only if no server could be measured. `env` values are passed as
+written, so `${VAR}` placeholders are not expanded.
+
 **Preview** what slimming changes, as a unified diff per changed tool:
 
 ```bash
@@ -371,15 +385,15 @@ the tokenizer and say whether the count is approximate. Set a default with `TOOL
 | --- | --- | --- | --- |
 | `TOOLISM_TOKENIZER` | `tokenizers/__init__.py` | Default tokenizer when `-t`/`--tokenizer` isn't given (same forms as `-t`) | `tiktoken:o200k_base` |
 | `TOOLISM_CACHE_DIR` | `tokenizers/anthropic_tokenizer.py` | Opt-in directory for bounded persistent Anthropic count snapshots | Persistence disabled (also when empty) |
-| `TOOLISM_DEBUG` | `cli.py`, `loaders/mcp.py` | Any non-empty value shows the full traceback instead of a one-line `error:`, and passes an `--mcp` server's stderr through to yours | One-line errors; the server's stderr is captured and hidden |
+| `TOOLISM_DEBUG` | `cli.py`, `loaders/mcp.py` | Any non-empty value shows the full traceback instead of a one-line `error:`, and passes an `--mcp` or `--mcp-config` server's stderr through to yours | One-line errors; the server's stderr is captured and hidden |
 | `NO_COLOR` | `cli.py` | If set (to any value), terminal output is not coloured | Coloured when writing to a terminal |
 | `TIKTOKEN_CACHE_DIR` | tiktoken | Where the `tiktoken:*` vocabulary is cached, so it can be reused offline | tiktoken's default cache in the system temp directory |
 | `ANTHROPIC_API_KEY` | `tokenizers/anthropic_tokenizer.py` | Needed for `-t anthropic:<model>` | `anthropic:` tokenizers fail with exit code 3 |
 | `GITHUB_STEP_SUMMARY` | `cli.py` | `toolism check` appends its Markdown summary to this file (set by GitHub Actions) | No step summary is written |
 
-A server started with `--mcp` inherits toolism's environment. The GitHub Action also reads its
-inputs as `INPUT_*` variables and uses `GITHUB_OUTPUT` and `RUNNER_TEMP`; these are set by the
-runner and don't need to be set by hand.
+A server started with `--mcp` or `--mcp-config` inherits toolism's environment. The GitHub Action
+also reads its inputs as `INPUT_*` variables and uses `GITHUB_OUTPUT` and `RUNNER_TEMP`; these are
+set by the runner and don't need to be set by hand.
 
 ## How it differs
 

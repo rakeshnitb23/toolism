@@ -989,3 +989,114 @@ def test_architecture_doc_lists_every_cli_option() -> None:
             for opt in param.opts:
                 if opt.startswith("--") and opt != "--help":
                     assert opt in doc, f"toolism {name} {opt} is missing from ARCHITECTURE.md"
+
+
+# ---------------------------------------------------------------- mcp config
+
+
+def _fake_servers(monkeypatch: pytest.MonkeyPatch, failing: tuple[str, ...] = ()) -> list[str]:
+    from toolism.errors import LoaderError
+    from toolism.formats import parse
+
+    started: list[str] = []
+
+    def fake_load(command: list[str], **_: Any) -> Any:
+        started.append(command[0])
+        if command[0] in failing:
+            raise LoaderError(f"MCP server {command[0]!r} failed: command not found")
+        return parse(
+            {
+                "tools": [
+                    {"name": f"{command[0]}_{i}", "inputSchema": {"type": "object"}} for i in (1, 2)
+                ]
+            }
+        )
+
+    monkeypatch.setattr("toolism.loaders.mcp.load_mcp_stdio", fake_load)
+    return started
+
+
+def _config(tmp_path: Path, servers: dict[str, Any]) -> Path:
+    path = tmp_path / "mcp.json"
+    path.write_text(json.dumps({"mcpServers": servers}), encoding="utf-8")
+    return path
+
+
+def test_measure_mcp_config_reports_each_server_and_the_total(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started = _fake_servers(monkeypatch, failing=("broken",))
+    config = _config(
+        tmp_path,
+        {
+            "github": {"command": "github", "env": {"GITHUB_TOKEN": "secret-value"}},
+            "broken": {"command": "broken"},
+            "remote": {"url": "https://example.com/mcp"},
+            "files": {"command": "files"},
+        },
+    )
+    result = invoke(runner, "measure", "--mcp-config", config, "-f", "json")
+    assert result.exit_code == 0, result.output
+    assert started == ["github", "broken", "files"]
+    data = json.loads(result.stdout)
+    assert [s["name"] for s in data["sources"]] == ["github", "files"]
+    assert data["tool_count"] == 4
+    assert [n["name"] for n in data["not_measured"]] == ["broken", "remote"]
+    assert "secret-value" not in result.output
+
+    table = invoke(runner, "measure", "--mcp-config", config)
+    assert table.exit_code == 0, table.output
+    assert "Total" in table.stdout
+    assert "4 tools from 2 of 4 servers" in table.stdout
+
+
+def test_measure_mcp_config_exits_2_when_no_server_is_measured(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_servers(monkeypatch, failing=("broken",))
+    config = _config(tmp_path, {"broken": {"command": "broken"}, "off": {"disabled": True}})
+    result = invoke(runner, "measure", "--mcp-config", config)
+    assert result.exit_code == 2
+    assert "Not measured: broken" in result.stdout
+    assert result.stderr.startswith(f"error: no server in {config} could be measured")
+
+
+@pytest.mark.parametrize("extra", [("tools.json",), ("--mcp", "server")])
+def test_measure_mcp_config_rejects_other_inputs_before_starting_anything(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: tuple[str, ...]
+) -> None:
+    started = _fake_servers(monkeypatch)
+    config = _config(tmp_path, {"a": {"command": "a"}})
+    result = invoke(runner, "measure", "--mcp-config", config, *extra)
+    assert result.exit_code == 2
+    assert result.stderr == "error: give only one of SOURCE, --mcp or --mcp-config\n"
+    assert started == []
+
+
+def test_measure_mcp_config_bad_tokenizer_fails_before_starting_servers(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started = _fake_servers(monkeypatch)
+    config = _config(tmp_path, {"a": {"command": "a"}})
+    result = invoke(runner, "measure", "--mcp-config", config, "-t", "bogus")
+    assert result.exit_code == 2
+    assert result.stderr.startswith("error: unknown tokenizer 'bogus'")
+    assert started == []
+
+
+def test_measure_mcp_config_not_a_config(runner: CliRunner, tmp_path: Path) -> None:
+    result = invoke(runner, "measure", "--mcp-config", MCP_TOOLS)
+    assert result.exit_code == 2
+    assert result.stderr.startswith("error: no 'mcpServers' object found in")
+    assert "hint: --mcp-config reads an MCP client config" in result.stderr
+
+
+@pytest.mark.mcp
+def test_measure_live_mcp_config(runner: CliRunner, tmp_path: Path) -> None:
+    pytest.importorskip("mcp")
+    config = _config(tmp_path, {"demo": {"command": sys.executable, "args": [str(DEMO)]}})
+    result = invoke(runner, "measure", "--mcp-config", config, "-f", "json")
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["sources"][0]["name"] == "demo"
+    assert data["tool_count"] == 2
