@@ -29,10 +29,11 @@ body:
     attributes:
       label: Output (with TOOLISM_DEBUG=1 for a traceback)
       render: text
-  - type: input
+  - type: textarea
     id: version
     attributes:
-      label: Versions
-      placeholder: "toolism --version; Python 3.12; OS"
+      label: Environment (toolism doctor)
+      description: Paste the output of `toolism doctor`. It reports local versions and whether API keys are set, never their values.
+      render: text
     validations:
       required: true

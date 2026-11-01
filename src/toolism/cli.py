@@ -219,6 +219,36 @@ def _root(
 
 @app.command()
 @_handle_errors
+def doctor() -> None:
+    """Print local versions and optional dependencies for a bug report (no network)."""
+    import platform
+    from importlib.metadata import PackageNotFoundError, version
+
+    typer.echo(f"toolism: {__version__}")
+    typer.echo(f"Python: {platform.python_version()}")
+    typer.echo(f"OS: {platform.system()} {platform.release()}")
+    for package in (
+        "typer",
+        "rich",
+        "tiktoken",
+        "mcp",
+        "anthropic",
+        "hypothesis",
+        "hypothesis-jsonschema",
+        "jsonschema",
+    ):
+        try:
+            installed = version(package)
+        except PackageNotFoundError:
+            installed = "not installed"
+        typer.echo(f"{package}: {installed}")
+    # Report presence only, never environment values or arbitrary variable names.
+    key_status = "set" if os.environ.get("ANTHROPIC_API_KEY") else "not set"
+    typer.echo(f"ANTHROPIC_API_KEY: {key_status}")
+
+
+@app.command()
+@_handle_errors
 def measure(
     source: SourceArg = None,
     mcp: McpOpt = None,
