@@ -34,6 +34,9 @@ to toolism in this release.
 
 ### Added
 
+- `toolism doctor` reports local versions and optional dependencies for bug reports,
+  without network requests or revealing API keys.
+
 - `toolism diff`: per-tool unified previews of changed descriptions and input schemas,
   with the same level/rule selection as `slim`, stdin and output-file support, and
   terminal colour (`-` red, `+` green, `@@` cyan) that respects `NO_COLOR`.

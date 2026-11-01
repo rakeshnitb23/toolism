@@ -74,7 +74,7 @@ def test_version(runner: CliRunner) -> None:
 def test_help_lists_commands(runner: CliRunner) -> None:
     result = invoke(runner, "--help")
     assert result.exit_code == 0
-    for command in ("measure", "slim", "diff", "check", "rules"):
+    for command in ("measure", "slim", "diff", "check", "rules", "doctor"):
         assert command in result.stdout
 
 
@@ -989,3 +989,79 @@ def test_architecture_doc_lists_every_cli_option() -> None:
             for opt in param.opts:
                 if opt.startswith("--") and opt != "--help":
                     assert opt in doc, f"toolism {name} {opt} is missing from ARCHITECTURE.md"
+
+
+@pytest.mark.parametrize("key_value", [None, "", "private-api-key-sentinel"])
+def test_doctor_reports_versions_without_secrets_or_network(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, key_value: str | None
+) -> None:
+    import importlib.metadata
+    import platform
+    import socket
+
+    installed = {"typer": "1.0", "rich": "2.0", "tiktoken": "3.0", "hypothesis": "4.0"}
+
+    def version(name: str) -> str:
+        if name in installed:
+            return installed[name]
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    def no_network(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("doctor must not make network requests")
+
+    monkeypatch.setattr(importlib.metadata, "version", version)
+    monkeypatch.setattr(platform, "python_version", lambda: "3.13.0")
+    monkeypatch.setattr(platform, "system", lambda: "TestOS")
+    monkeypatch.setattr(platform, "release", lambda: "1.0")
+    monkeypatch.setattr(socket, "create_connection", no_network)
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    for module in (
+        "anthropic",
+        "mcp",
+        "hypothesis",
+        "hypothesis_jsonschema",
+        "jsonschema",
+        "tiktoken",
+    ):
+        monkeypatch.setitem(sys.modules, module, None)
+    if key_value is None:
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    else:
+        monkeypatch.setenv("ANTHROPIC_API_KEY", key_value)
+    monkeypatch.setenv("UNRELATED_SECRET", "unrelated-secret-sentinel")
+
+    result = invoke(runner, "doctor")
+
+    assert result.exit_code == 0, result.output
+    assert f"toolism: {__version__}" in result.stdout
+    assert "Python: 3.13.0" in result.stdout
+    assert "OS: TestOS 1.0" in result.stdout
+    for name, value in installed.items():
+        assert f"{name}: {value}" in result.stdout
+    for name in ("mcp", "anthropic", "hypothesis-jsonschema", "jsonschema"):
+        assert f"{name}: not installed" in result.stdout
+    assert f"ANTHROPIC_API_KEY: {'set' if key_value else 'not set'}" in result.stdout
+    assert "private-api-key-sentinel" not in result.output
+    assert "unrelated-secret-sentinel" not in result.output
+    assert result.stderr == ""
+
+
+def test_doctor_reports_all_installed_extras(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import importlib.metadata
+
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "9.8.7")
+    result = invoke(runner, "doctor")
+    assert result.exit_code == 0, result.output
+    for name in (
+        "typer",
+        "rich",
+        "tiktoken",
+        "mcp",
+        "anthropic",
+        "hypothesis",
+        "hypothesis-jsonschema",
+        "jsonschema",
+    ):
+        assert f"{name}: 9.8.7" in result.stdout
