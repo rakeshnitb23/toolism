@@ -68,25 +68,45 @@ uv sync --all-extras          # creates .venv with toolism, all extras and dev t
 uv run toolism --version
 ```
 
+
 ## Checks
 
-CI runs exactly these. Run them before you open a pull request:
+CI runs exactly these checks. Run them before opening a pull request:
 
 ```bash
-uv run ruff format . && uv run ruff check .    # format and lint
-uv run mypy                                    # strict typing on src/
-uv run pytest -m "not slow"                    # fast suite (~1 min)
-uv run pytest -m slow                          # equivalence on the real-server corpus (~3 min)
-uv run pytest --cov                            # coverage must stay >= 90%
-uvx typos                                      # spelling (same check as CI)
+uv run ruff format . && uv run ruff check .
+uv run mypy
+uv run pytest -m "not slow"
+uv run pytest -m slow
+uv run pytest --cov
+uvx typos
 ```
 
-The tiktoken tests need the `o200k_base` vocabulary. It is downloaded on first use; offline, those
-tests are skipped. Set `TIKTOKEN_CACHE_DIR` to reuse a downloaded copy.
+### Optional pre-commit hooks
 
-The layering test (`tests/test_layering.py`) enforces the architecture: lower layers never import
-higher ones, and rules never import the pipeline. If it fails, the import is in the wrong place.
-See [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md).
+You can optionally use [pre-commit](https://pre-commit.com/) to run formatting, linting and spelling checks automatically before each commit.
+
+Install pre-commit:
+
+```bash
+uv tool install pre-commit
+pre-commit install
+```
+
+Run all hooks manually:
+
+```bash
+pre-commit run --all-files
+```
+
+The hooks run:
+
+- `ruff-format` — formats Python code.
+- `ruff` — checks Python linting issues.
+- `typos` — checks spelling mistakes.
+
+Pre-commit is optional. You can continue running the existing checks directly without installing it.
+
 
 ## Adding a rule in 3 steps
 
