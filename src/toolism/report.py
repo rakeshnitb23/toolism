@@ -410,6 +410,7 @@ def render_rules(
     fmt: Format = "table",
     *,
     rules: Sequence[type[Rule]] | None = None,
+    detail: bool = False,
     width: int = 100,
     color: bool = False,
 ) -> str:
@@ -424,6 +425,26 @@ def render_rules(
         return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
     if fmt == "markdown":
         return _rules_markdown(chosen)
+    if detail:
+        renderables: list[Any] = []
+        for rule in chosen:
+            renderables += [
+                Text(f"{rule.id} {rule.name}"),
+                Text(rule.summary),
+                Text(_rule_doc(rule)),
+                Text(f"Safety: {rule.safety.label} — {_SAFETY_TEXT[rule.safety]}"),
+                Text(f"Enabled by: {_enabled_by(rule)}"),
+            ]
+            if rule.reorders:
+                renderables.append(Text("Reorders tools; applied after all content rules."))
+            if rule.option_specs:
+                options = Table(title="Options", title_justify="left")
+                for header in ("Option", "Type", "Default", "Meaning"):
+                    options.add_column(header)
+                for name, spec in rule.option_specs.items():
+                    options.add_row(name, spec.type.__name__, json.dumps(spec.default), spec.help)
+                renderables.append(options)
+        return _console_render(renderables, width, color)
     table = Table(title="toolism rules", title_justify="left")
     table.add_column("ID")
     table.add_column("Name")

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import subprocess
 import sys
@@ -989,3 +990,55 @@ def test_architecture_doc_lists_every_cli_option() -> None:
             for opt in param.opts:
                 if opt.startswith("--") and opt != "--help":
                     assert opt in doc, f"toolism {name} {opt} is missing from ARCHITECTURE.md"
+
+
+@pytest.mark.parametrize("selector", ["SL004", "inline-defs"])
+@pytest.mark.parametrize("fmt", ["table", "json", "markdown"])
+@pytest.mark.parametrize("to_file", [False, True])
+def test_rules_single_detail(
+    runner: CliRunner, tmp_path: Path, selector: str, fmt: str, to_file: bool
+) -> None:
+    from toolism.rules import get_rule
+
+    args = ["rules", selector, "-f", fmt]
+    output = tmp_path / "rule.txt"
+    if to_file:
+        args += ["-o", str(output)]
+    result = invoke(runner, *args)
+    assert result.exit_code == 0, result.output
+    assert result.stderr == ""
+    text = output.read_text(encoding="utf-8") if to_file else result.stdout
+    if to_file:
+        assert result.stdout == ""
+    if fmt == "json":
+        data = json.loads(text)
+        assert data["kind"] == "rules"
+        assert [rule["id"] for rule in data["rules"]] == ["SL004"]
+    else:
+        description = inspect.cleandoc(get_rule("SL004").__doc__ or "").replace("``", "`")
+        assert " ".join(description.split()) in " ".join(text.split())
+        assert "SL004" in text
+        assert "inline-defs" in text
+        assert "SL001" not in text
+        assert "safe" in text
+        assert "default" in text
+        assert "Validation-equivalent" in text
+
+
+def test_rules_single_detail_options(runner: CliRunner) -> None:
+    result = invoke(runner, "rules", "SL101")
+    assert result.exit_code == 0, result.output
+    assert "max_chars" in result.stdout
+    assert "300" in result.stdout
+    assert "int" in result.stdout
+    assert "--level annotations" in result.stdout
+
+
+@pytest.mark.parametrize("selector", ["SL999", "not-a-rule"])
+def test_rules_unknown_uses_existing_error(runner: CliRunner, selector: str) -> None:
+    result = invoke(runner, "rules", selector)
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert result.stderr == (
+        f"error: unknown rule {selector!r}\nhint: run 'toolism rules' to list rules\n"
+    )
