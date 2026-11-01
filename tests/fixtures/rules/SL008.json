@@ -18,6 +18,27 @@
     "expected_schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": false}
   },
   {
+    "name": "additionalProperties: true beside unevaluatedProperties: false is kept",
+    "tool": {"name": "t", "schema": {"type": "object", "additionalProperties": true, "unevaluatedProperties": false}}
+  },
+  {
+    "name": "items: {} beside unevaluatedItems: false is kept",
+    "tool": {"name": "t", "schema": {"type": "array", "items": {}, "unevaluatedItems": false}}
+  },
+  {
+    "name": "keywords in a branch stay when the parent restricts unevaluated properties",
+    "tool": {"name": "t", "schema": {"allOf": [{"additionalProperties": true}], "unevaluatedProperties": false}}
+  },
+  {
+    "name": "keywords stay when unevaluatedProperties is a schema",
+    "tool": {"name": "t", "schema": {"additionalProperties": true, "unevaluatedProperties": {"type": "string"}}}
+  },
+  {
+    "name": "permissive unevaluated keywords are still dropped",
+    "tool": {"name": "t", "schema": {"type": "object", "additionalProperties": true, "unevaluatedProperties": true}},
+    "expected_schema": {"type": "object"}
+  },
+  {
     "name": "meaningful values are kept",
     "tool": {"name": "t", "schema": {"type": "object", "properties": {"a": {"type": ["string", "null"], "items": {"type": "string"}}}, "required": ["a"], "additionalProperties": false}}
   }

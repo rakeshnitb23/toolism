@@ -23,6 +23,8 @@ jobs:
             exit 1
           fi
       - run: uv build
+      - name: Run the built wheel before publishing it
+        run: uv run --isolated --no-project --with "$(ls dist/*.whl)" toolism measure examples/mcp_tools.json -t heuristic
       - uses: actions/upload-artifact@v7
         with:
           name: dist
@@ -64,6 +66,6 @@ jobs:
           notes = match.group(1).strip() if match else f"toolism {version}"
           pathlib.Path("notes.md").write_text(notes + "\n", encoding="utf-8")
           EOF
-      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file notes.md
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --notes-file notes.md --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

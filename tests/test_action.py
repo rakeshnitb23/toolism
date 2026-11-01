@@ -60,6 +60,13 @@ def test_build_args(tmp_path: Path) -> None:
     ]
 
 
+def test_build_args_mcp_timeout() -> None:
+    env = {"INPUT_MCP": "npx -y server", "INPUT_MCP_TIMEOUT": "120"}
+    args = _action.build_args(env, Path())
+    assert args[:5] == ["check", "--mcp", "npx -y server", "--mcp-timeout", "120"]
+    assert "--mcp-timeout" not in _action.build_args({"INPUT_MCP": "npx -y server"}, Path())
+
+
 def test_build_args_mcp_and_update() -> None:
     env = {
         "INPUT_MCP": "npx -y server",
@@ -138,3 +145,16 @@ def test_action_yml_passes_every_input_through_env() -> None:
     run_scripts = re.findall(r"run: \|\n((?:        .*\n?)+)", text)
     assert run_scripts
     assert all("inputs." not in script for script in run_scripts)
+
+
+def test_readme_documents_every_action_input_and_output() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    action = (ROOT / "action.yml").read_text(encoding="utf-8")
+    inputs = action.split("\ninputs:\n", 1)[1].split("\noutputs:\n", 1)[0]
+    outputs_block = action.split("\noutputs:\n", 1)[1].split("\nruns:\n", 1)[0]
+    input_names = re.findall(r"^  ([a-z-]+):$", inputs, flags=re.M)
+    output_names = re.findall(r"^  ([a-z-]+):$", outputs_block, flags=re.M)
+    input_table = readme.split("### Inputs\n", 1)[1].split("\n### Outputs\n", 1)[0]
+    output_table = readme.split("### Outputs\n", 1)[1].split("\n```yaml", 1)[0]
+    assert all("`" + name + "`" in input_table for name in input_names)
+    assert all("`" + name + "`" in output_table for name in output_names)

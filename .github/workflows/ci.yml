@@ -105,6 +105,37 @@ jobs:
       - run: uv sync --locked --all-extras
       - run: uv run pytest -m slow tests/test_bench.py
 
+  package:
+    name: package build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+      - run: uv build
+      - run: uvx twine check --strict dist/*
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  package-install:
+    name: package install
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - name: Run the built wheel, without the source tree
+        run: uv run --isolated --no-project --with "$(ls dist/*.whl)" toolism measure examples/mcp_tools.json -t heuristic
+
   dogfood:
     name: dogfood (our own action)
     runs-on: ubuntu-latest
