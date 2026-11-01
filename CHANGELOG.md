@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `toolism measure --mcp-config FILE` measures every stdio server in an MCP client config
+  (`claude_desktop_config.json`, `.cursor/mcp.json`, `.mcp.json`) and reports one row per server
+  plus a total over all their tools. A failing server is reported without stopping the others;
+  remote and disabled entries are skipped. Failure reasons leave out the server's command line
+  and mask `env` and argument values. JSON output uses the new `measure_sources` report kind.
+  (#141)
+
 ## [0.2.0] - 2026-10-31
 
 toolism's second release lets you see every change before you make it, verifies more precisely,

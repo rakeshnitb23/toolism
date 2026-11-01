@@ -98,10 +98,10 @@ models, errors         (bottom: no internal deps)
 | C6 | Rules | `rules/sl0xx_*.py`, `rules/sl1xx_*.py` | The rule catalogue (section 6) |
 | C7 | Pipeline | `pipeline.py` | Select rules, apply to fixpoint, attribute savings per rule and tool, verify-and-rollback |
 | C8 | Verify | `verify.py` | Bidirectional property-based equivalence; deterministic; reports `equivalent / counterexample / skipped` |
-| C9 | Measure & report | `measure.py`, `report.py` | `TokenReport`, `SlimReport`; renderers: rich table, JSON (versioned), Markdown |
+| C9 | Measure & report | `measure.py`, `report.py` | `TokenReport`, `SourcesReport`, `SlimReport`; renderers: rich table, JSON (versioned), Markdown |
 | C10 | Check | `check.py` | Baseline file, budgets, comparison → `CheckResult`, exit codes |
 | C11 | CLI | `cli.py` | `toolism measure / slim / diff / check / rules` |
-| C12 | MCP loader | `loaders/mcp.py` | Launch an MCP server over stdio and page through `tools/list` (extra: `mcp`) |
+| C12 | MCP loader | `loaders/mcp.py`, `loaders/mcp_config.py` | Launch an MCP server over stdio and page through `tools/list` (extra: `mcp`); read an MCP client config's `mcpServers` and load each server |
 | C13 | GitHub Action & CI | `action.yml`, `.github/workflows/*` | Composite Action wrapping `toolism check`; CI matrix; release via PyPI trusted publishing |
 | C14 | Benchmark | `bench/` | Snapshots of public MCP servers + Pydantic-style schemas; results across tokenizers |
 | C15 | Docs | `README.md`, `CONTRIBUTING.md`, `docs/` | Quickstart, rule catalogue, contributor guide |
@@ -184,6 +184,7 @@ is `toolism.__all__`; everything else is internal (`toolism._...` or not re-expo
 
 ```
 toolism measure SOURCE [--tokenizer T] [--format table|json|markdown] [--output FILE]
+toolism measure --mcp-config FILE [--mcp-timeout SECONDS] [--tokenizer T] [--format ...] [--output FILE]
 toolism slim    SOURCE [--output FILE] [--level safe|annotations] [--enable ID]... [--disable ID]...
                         [--option ID.key=value]... [--verify [--verify-examples N] [--fail-on-rollback]]
                         [--tokenizer T] [--report table|json|markdown] [--report-file FILE]
@@ -202,6 +203,7 @@ toolism diff    [SOURCE] [--level safe|annotations] [--enable ID]... [--disable 
 `SOURCE`. `toolism --help` and `toolism <command> --help` are the authoritative reference.
 
 - `SOURCE` is a JSON file, `-` for stdin, or `--mcp "<command>"` for a live stdio server.
+- `measure --mcp-config FILE` reads the `mcpServers` object of an MCP client config and starts each stdio server in turn (`--mcp-timeout` applies per server). It reports one row per server and a total counted over all their tools as one list. Remote (`url`) and `"disabled": true` entries are skipped; a failing server is reported and the rest still run. It exits `0` when at least one server was measured and `2` when none could be.
 - **Exit codes:**
   - `0` = OK
   - `1` = budget exceeded (check), a verification rollback happened (slim `--fail-on-rollback`), or differences found (diff `--exit-code`)

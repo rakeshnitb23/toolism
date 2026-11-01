@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from toolism.measurement import TokenReport
+from toolism.measurement import SourcesReport, TokenReport
 from toolism.models import ToolDef, ToolSet
 from toolism.pipeline import SlimReport
 from toolism.rules import Rule, Safety, all_rules
@@ -25,10 +25,12 @@ __all__ = [
     "Format",
     "render_rules",
     "render_slim_report",
+    "render_sources_report",
     "render_token_report",
     "render_tool_diff",
     "rule_to_dict",
     "slim_report_to_dict",
+    "sources_report_to_dict",
     "token_report_to_dict",
 ]
 
@@ -128,6 +130,72 @@ def render_token_report(
     table.add_column("% of total", justify="right")
     for t in shown:
         table.add_row(t.name, _n(t.tokens), f"{_pct(t.tokens, report.total):.1f}%")
+    return _console_render([table, Text(summary), *map(Text, notes)], width, color)
+
+
+def sources_report_to_dict(report: SourcesReport) -> dict[str, Any]:
+    return {
+        "toolism_report": REPORT_VERSION,
+        "kind": "measure_sources",
+        "tokenizer": report.tokenizer,
+        "approximate": report.approximate,
+        "total_tokens": report.total,
+        "tool_count": report.tool_count,
+        "sources": [
+            {
+                "name": s.name,
+                "tokens": s.tokens,
+                "tool_count": s.tool_count,
+                "percent": _pct(s.tokens, report.total),
+            }
+            for s in report.sources
+        ],
+        "not_measured": [{"name": name, "reason": reason} for name, reason in report.not_measured],
+        "uncounted": list(report.uncounted),
+        "warnings": list(report.warnings),
+    }
+
+
+def render_sources_report(
+    report: SourcesReport, fmt: Format = "table", *, width: int = 100, color: bool = False
+) -> str:
+    """One row per source plus a total row, for ``measure --mcp-config``."""
+    if fmt == "json":
+        return json.dumps(sources_report_to_dict(report), indent=2, ensure_ascii=False) + "\n"
+    ranked = sorted(report.sources, key=lambda s: (-s.tokens, s.name))
+    summary = (
+        f"{_n(report.total)} tokens across {report.tool_count} tools from "
+        f"{len(report.sources)} of {len(report.sources) + len(report.not_measured)} servers "
+        f"— {_tokenizer_note(report.tokenizer, report.approximate)}"
+    )
+    notes = [f"Warning: {w}" for w in report.warnings]
+    notes += [f"Not measured: {name}: {reason}" for name, reason in report.not_measured]
+    if report.uncounted:
+        notes.append(f"Not counted (provider built-ins): {', '.join(report.uncounted)}")
+    total_cells = ["Total", str(report.tool_count), _n(report.total), ""]
+
+    if fmt == "markdown":
+        rows = [
+            [f"`{s.name}`", str(s.tool_count), _n(s.tokens), f"{_pct(s.tokens, report.total):.1f}%"]
+            for s in ranked
+        ]
+        rows.append([f"**{cell}**" if cell else cell for cell in total_cells])
+        parts = ["### toolism — tool definition tokens by server", "", summary, ""]
+        parts.append(_md_table(["Server", "Tools", "Tokens", "% of total"], rows, "lrrr"))
+        parts += ["", *notes] if notes else []
+        return "\n".join(parts) + "\n"
+
+    table = Table(title="Tool definition tokens by server", title_justify="left")
+    table.add_column("Server")
+    table.add_column("Tools", justify="right")
+    table.add_column("Tokens", justify="right")
+    table.add_column("% of total", justify="right")
+    for s in ranked:
+        table.add_row(
+            s.name, str(s.tool_count), _n(s.tokens), f"{_pct(s.tokens, report.total):.1f}%"
+        )
+    table.add_section()
+    table.add_row(*total_cells)
     return _console_render([table, Text(summary), *map(Text, notes)], width, color)
 
 
