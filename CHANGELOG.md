@@ -34,6 +34,9 @@ to toolism in this release.
 
 ### Added
 
+- `toolism measure --price USD_PER_MTOK` estimates tool-definition cost per 1,000
+  requests in table, Markdown and JSON reports, using a user-supplied price.
+
 - `toolism diff`: per-tool unified previews of changed descriptions and input schemas,
   with the same level/rule selection as `slim`, stdin and output-file support, and
   terminal colour (`-` red, `+` green, `@@` cyan) that respects `NO_COLOR`.
