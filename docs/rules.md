@@ -22,6 +22,7 @@ annotations and run with `--level annotations`. Turn any rule on or off with `--
 | [`SL101`](#sl101-max-description-length) | max-description-length | annotations | `--level annotations` |
 | [`SL102`](#sl102-drop-examples) | drop-examples | annotations | `--level annotations` |
 | [`SL103`](#sl103-drop-titles) | drop-titles | annotations | `--level annotations` |
+| [`SL104`](#sl104-dedupe-descriptions) | dedupe-descriptions | annotations | `--level annotations` |
 
 ## SL001 redundant-title
 
@@ -186,6 +187,17 @@ model produce well-formed arguments — measure before and after on your own eva
 `title` is an annotation keyword, so removing it never changes validation. This lossy
 rule is for users who prefer smaller schemas over retaining display labels. Property names are
 schema keys rather than `title` keywords and are therefore never removed.
+
+- Safety: `annotations` — Validation-equivalent, but may drop annotation text the model could use.
+- Enabled by: `--level annotations`
+
+## SL104 dedupe-descriptions
+
+**Drop property descriptions that match a sentence or line of the tool description.**
+
+Some servers repeat each property's description word for word in the tool description, so
+the model pays for the same text twice. Drop the property-level copy only when it matches a
+whole sentence or line of the tool description.
 
 - Safety: `annotations` — Validation-equivalent, but may drop annotation text the model could use.
 - Enabled by: `--level annotations`

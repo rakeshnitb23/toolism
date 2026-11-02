@@ -12,6 +12,8 @@ __all__ = ["TokenReport", "ToolCount", "measure"]
 
 @dataclass(frozen=True)
 class ToolCount:
+    """Token count for one tool."""
+
     name: str
     tokens: int
 

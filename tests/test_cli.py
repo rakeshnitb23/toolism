@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from rich.text import Text
 from typer.testing import CliRunner
 
 from toolism import cli
@@ -123,6 +124,20 @@ def test_measure_stdin_and_output_file(runner: CliRunner, tmp_path: Path) -> Non
     assert result.exit_code == 0, result.output
     assert result.stdout == ""
     assert out.read_text(encoding="utf-8").startswith("### toolism — tool definition tokens")
+
+
+def test_measure_accepts_a_file_with_a_utf8_bom(runner: CliRunner, tmp_path: Path) -> None:
+    path = tmp_path / "bom.json"
+    path.write_bytes(b"\xef\xbb\xbf" + json.dumps(BLOATED).encode("utf-8"))
+    result = invoke(runner, "measure", path)
+    assert result.exit_code == 0, result.output
+    assert "create_issue" in result.stdout
+
+
+def test_measure_accepts_stdin_with_a_utf8_bom(runner: CliRunner) -> None:
+    result = invoke(runner, "measure", "-", input="\ufeff" + json.dumps(BLOATED))
+    assert result.exit_code == 0, result.output
+    assert "create_issue" in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -519,6 +534,130 @@ def test_main_switches_non_utf8_streams_to_utf8(monkeypatch: pytest.MonkeyPatch)
 # ---------------------------------------------------------------------- diff
 
 
+@pytest.mark.parametrize("forced_color", [False, True])
+def test_diff_mcp_options_in_help(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, forced_color: bool
+) -> None:
+    from typer import rich_utils
+
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr(rich_utils, "FORCE_TERMINAL", forced_color)
+    monkeypatch.setattr(rich_utils, "COLOR_SYSTEM", "standard" if forced_color else None)
+    result = invoke(runner, "diff", "--help", color=True)
+    assert result.exit_code == 0
+    assert ("\x1b[" in result.stdout) == forced_color
+    # Rich can style the leading dashes separately from the rest of an option.
+    help_text = Text.from_ansi(result.stdout).plain
+    assert "--mcp" in help_text
+    assert "--mcp-timeout" in help_text
+    assert "[SOURCE]" in help_text
+
+
+@pytest.mark.parametrize("source", [MCP_TOOLS, "-"])
+def test_diff_mcp_rejects_conflicting_input_before_loading(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, source: Path | str
+) -> None:
+    def unexpected_load(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("conflicting inputs must be rejected before starting a server")
+
+    monkeypatch.setattr("toolism.loaders.mcp.load_mcp_stdio", unexpected_load)
+    result = invoke(runner, "diff", source, "--mcp", "must-not-start")
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert result.stderr == "error: give either SOURCE or --mcp, not both\n"
+
+
+@pytest.mark.parametrize(("args", "timeout"), [((), 60.0), (("--mcp-timeout", "2.5"), 2.5)])
+def test_diff_mcp_forwards_timeout_and_preserves_preview(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, args: tuple[str, ...], timeout: float
+) -> None:
+    from toolism.formats import parse
+
+    calls: list[tuple[str, float]] = []
+
+    def load(command: str, *, timeout: float) -> Any:
+        calls.append((command, timeout))
+        return parse(BLOATED)
+
+    monkeypatch.setattr("toolism.loaders.mcp.load_mcp_stdio", load)
+    expected = invoke(runner, "diff", "-", input=json.dumps(BLOATED))
+    result = invoke(runner, "diff", "--mcp", "test-server", *args)
+    assert result.exit_code == expected.exit_code == 0
+    assert result.stdout == expected.stdout
+    assert "@@" in result.stdout
+    assert result.stderr == expected.stderr
+    assert calls == [("test-server", timeout)]
+
+
+def test_diff_mcp_without_extra(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    from toolism.errors import MissingExtraError
+
+    def missing() -> Any:
+        raise MissingExtraError("Loading tools from an MCP server", "mcp")
+
+    monkeypatch.setattr("toolism.loaders.mcp._import_mcp", missing)
+    result = invoke(runner, "diff", "--mcp", "must-not-start")
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert "hint: pip install 'toolism[mcp]'" in result.stderr
+    assert "Traceback" not in result.output
+
+
+def test_diff_mcp_loader_failure(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    from toolism.errors import LoaderError
+
+    def fail(command: str, *, timeout: float) -> Any:
+        raise LoaderError("MCP fixture failed", hint="check the server command")
+
+    monkeypatch.setattr("toolism.loaders.mcp.load_mcp_stdio", fail)
+    result = invoke(runner, "diff", "--mcp", "test-server")
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert result.stderr == "error: MCP fixture failed\nhint: check the server command\n"
+
+
+def test_diff_mcp_timeout_requires_a_number(runner: CliRunner) -> None:
+    result = invoke(runner, "diff", "--mcp", "must-not-start", "--mcp-timeout", "soon")
+    assert result.exit_code == 2
+    assert "soon" in result.stderr
+    assert "valid float" in result.stderr
+
+
+@pytest.mark.parametrize("document", [[], {"tools": [BLOATED["tools"][0]] * 2}])
+def test_diff_mcp_preserves_empty_and_warning_output(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, document: Any
+) -> None:
+    from toolism.formats import parse
+
+    monkeypatch.setattr("toolism.loaders.mcp.load_mcp_stdio", lambda *a, **k: parse(document))
+    expected = invoke(runner, "diff", "-", input=json.dumps(document))
+    result = invoke(runner, "diff", "--mcp", "test-server")
+    assert result.exit_code == expected.exit_code == 0
+    assert result.stdout == expected.stdout
+    assert result.stderr == expected.stderr
+
+
+@pytest.mark.mcp
+def test_diff_live_mcp_matches_file_and_writes_output(runner: CliRunner, tmp_path: Path) -> None:
+    pytest.importorskip("mcp")
+    from toolism.io import dumps
+    from toolism.loaders.mcp import load_mcp_stdio
+
+    command = f'"{sys.executable}" "{DEMO}"'
+    source = tmp_path / "tools.json"
+    source.write_text(dumps(load_mcp_stdio(command)), encoding="utf-8")
+    args = ("--level", "annotations", "--disable", "SL103")
+    expected = invoke(runner, "diff", source, *args)
+    target = tmp_path / "previews" / "tools.diff"
+    result = invoke(runner, "diff", "--mcp", command, *args, "-o", target)
+    assert result.exit_code == expected.exit_code == 0, result.output
+    assert result.stdout == ""
+    assert result.stderr == expected.stderr
+    assert target.read_text(encoding="utf-8") == expected.stdout
+    assert "@@" in expected.stdout
+    assert "create_contact" in expected.stdout
+
+
 def test_diff_changed_tool_and_unchanged_file(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -564,7 +703,30 @@ def test_diff_changed_tool_and_unchanged_file(
 def test_diff_omits_unchanged_tools(runner: CliRunner, document: Any) -> None:
     result = invoke(runner, "diff", "-", input=json.dumps(document))
     assert result.exit_code == 0, result.output
-    assert result.stdout == result.stderr == ""
+    assert result.stdout == ""
+    assert result.stderr == "No changes.\n"
+
+
+def test_diff_exit_code_exits_one_on_changes_and_still_prints_diff(runner: CliRunner) -> None:
+    document = [{"name": "search", "inputSchema": {"title": "searchArguments", "type": "object"}}]
+    # Without --exit-code, exit code is 0
+    res_default = invoke(runner, "diff", "-", input=json.dumps(document))
+    assert res_default.exit_code == 0
+    assert '--- "search" (before)\n' in res_default.stdout
+
+    # With --exit-code, exit code is 1 and diff is still printed to stdout
+    result = invoke(runner, "diff", "-", "--exit-code", input=json.dumps(document))
+    assert result.exit_code == 1
+    assert result.stderr == ""
+    assert result.stdout == res_default.stdout
+
+
+def test_diff_exit_code_exits_zero_when_no_changes(runner: CliRunner) -> None:
+    document = [{"name": "ping", "inputSchema": {"type": "object"}}]
+    result = invoke(runner, "diff", "-", "--exit-code", input=json.dumps(document))
+    assert result.exit_code == 0
+    assert result.stdout == ""
+    assert result.stderr == "No changes.\n"
 
 
 @pytest.mark.parametrize(
@@ -590,12 +752,13 @@ def test_diff_uses_slim_level_and_rule_selection(
     ]
     result = invoke(runner, "diff", "-", *args, input=json.dumps(document))
     assert result.exit_code == 0, result.output
-    assert result.stderr == ""
     if changes:
+        assert result.stderr == ""
         assert '-        "examples": [\n' in result.stdout
         assert '-          "sample"\n' in result.stdout
     else:
         assert result.stdout == ""
+        assert result.stderr == "No changes.\n"
 
 
 def test_diff_applies_repeated_rule_options_to_tool_description(runner: CliRunner) -> None:
@@ -639,7 +802,8 @@ def test_diff_does_not_confuse_tool_reordering_with_schema_changes(runner: CliRu
     document = [{"name": name, "inputSchema": {"type": "object"}} for name in ("z", "a")]
     result = invoke(runner, "diff", "-", "--enable", "SL007", input=json.dumps(document))
     assert result.exit_code == 0, result.output
-    assert result.stdout == result.stderr == ""
+    assert result.stdout == ""
+    assert result.stderr == "No changes.\n"
 
 
 def test_diff_retains_duplicate_occurrences_when_tools_are_reordered(runner: CliRunner) -> None:
@@ -671,6 +835,7 @@ def test_diff_retains_duplicate_occurrences_when_tools_are_reordered(runner: Cli
     assert '--- "z"' not in result.stdout
     assert '--- "a"' not in result.stdout
     assert "Warning: duplicate tool name 'same' (2 times)" in result.stderr
+    assert "No changes." not in result.stderr
 
 
 def test_diff_writes_output_file(runner: CliRunner, bloated: Path, tmp_path: Path) -> None:
@@ -686,7 +851,8 @@ def test_diff_replaces_stale_output_with_empty_result(runner: CliRunner, tmp_pat
     target.write_text("old diff", encoding="utf-8")
     result = invoke(runner, "diff", "-", "-o", target, input="[]")
     assert result.exit_code == 0, result.output
-    assert result.stdout == result.stderr == ""
+    assert result.stdout == ""
+    assert result.stderr == "No changes.\n"
     assert target.read_bytes() == b""
 
 
@@ -751,14 +917,63 @@ def test_diff_keeps_lf_hunks_with_unicode_line_separators(
 def test_diff_requires_source(runner: CliRunner) -> None:
     result = invoke(runner, "diff")
     assert result.exit_code == 2
-    assert "missing argument" in result.output.lower()
-    assert "SOURCE" in result.output
+    assert result.stdout == ""
+    assert result.stderr.startswith("error: missing SOURCE:")
 
 
 def test_diff_reports_output_write_errors(runner: CliRunner, bloated: Path, tmp_path: Path) -> None:
     result = invoke(runner, "diff", bloated, "-o", tmp_path)
     assert result.exit_code == 2
     assert "cannot write" in result.stderr
+
+
+def test_diff_colours_terminal_and_keeps_piped_no_color_and_file_plain(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "tools.json"
+    source.write_text(
+        json.dumps(
+            {
+                "tools": [
+                    {
+                        "name": "search",
+                        "description": "Search.   ",
+                        "inputSchema": {"title": "searchArguments", "type": "object"},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    plain = invoke(runner, "diff", source)
+    assert plain.exit_code == 0, plain.output
+    assert "\x1b[" not in plain.stdout
+
+    # Simulate a TTY on stdout
+    real_style = cli._style
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr(cli, "_style", lambda _stream: real_style(FakeTTY()))
+    coloured = invoke(runner, "diff", source)
+    assert coloured.exit_code == 0, coloured.output
+    assert "\x1b[36m@@ -1,8 +1,7 @@\x1b[0m\n" in coloured.stdout
+    assert '\x1b[31m-  "description": "Search.   ",\x1b[0m\n' in coloured.stdout
+    assert '\x1b[32m+  "description": "Search.",\x1b[0m\n' in coloured.stdout
+    assert '\x1b[31m-    "title": "searchArguments",\x1b[0m\n' in coloured.stdout
+    assert '--- "search" (before)\n' in coloured.stdout
+    assert '+++ "search" (after)\n' in coloured.stdout
+
+    # NO_COLOR disables terminal colouring and leaves output byte-for-byte plain
+    monkeypatch.setenv("NO_COLOR", "1")
+    no_color = invoke(runner, "diff", source)
+    assert no_color.exit_code == 0, no_color.output
+    assert no_color.stdout == plain.stdout
+
+    # Writing to -o never emits ANSI escapes even when stdout is a TTY without NO_COLOR
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    out_file = tmp_path / "out.diff"
+    to_file = invoke(runner, "diff", source, "-o", out_file)
+    assert to_file.exit_code == 0, to_file.output
+    assert out_file.read_text(encoding="utf-8") == plain.stdout
 
 
 def test_architecture_doc_lists_every_cli_option() -> None:

@@ -111,7 +111,7 @@ models, errors         (bottom: no internal deps)
 | ID | Name | Safety | Default | What it does |
 |---|---|---|---|---|
 | SL001 | `redundant-title` | SAFE | on | Drop `title` equal (normalized) to the property name, `$defs` key, or tool name (± `Arguments/Args/Input/Params/Request`) |
-| SL002 | `nullable-anyof` | SAFE | on | `anyOf/oneOf` of bare `{type}` branches → `type: [..]` (oneOf only when types are disjoint) |
+| SL002 | `nullable-anyof` | SAFE | on | `anyOf/oneOf` of bare `{type}` branches → `type: [..]` (oneOf only when types are disjoint); hoists string keywords when exactly one branch is a string |
 | SL003 | `null-default` | SAFE | on | Drop `default: null` on properties that aren't `required` |
 | SL004 | `inline-defs` | SAFE | on | Inline `$defs` referenced exactly once (non-recursive, no key collision); delete unreferenced `$defs` |
 | SL005 | `description-whitespace` | SAFE | on | Dedent docstrings, strip trailing spaces, collapse 3+ newlines and space runs |
@@ -119,8 +119,11 @@ models, errors         (bottom: no internal deps)
 | SL007 | `stable-order` | SAFE | **off** | Sort tools by name (0 tokens saved; keeps prompt-cache prefixes stable) |
 | SL008 | `noop-keywords` | SAFE | on | Drop `required: []`, empty `description`, empty `$defs`, `additionalProperties: true`, `items: {}`; `type: ["x"]` → `"x"` |
 | SL009 | `schema-uri` | SAFE | on | Drop the root `$schema` when the schema has no dialect-sensitive constructs (added in the C6 design review) |
+| SL010 | `single-allof` | SAFE | on | Collapse a single-branch `allOf` when merging its keywords preserves validation |
 | SL101 | `max-description-length` | LOSSY_ANNOTATIONS | off | Truncate descriptions at a sentence boundary (option `max_chars`, default 300) |
 | SL102 | `drop-examples` | LOSSY_ANNOTATIONS | off | Remove `examples` / `example` keywords |
+| SL103 | `drop-titles` | LOSSY_ANNOTATIONS | off | Remove all schema `title` keywords |
+| SL104 | `dedupe-descriptions` | LOSSY_ANNOTATIONS | off | Drop property descriptions that match a sentence or line of the tool description |
 
 **Levels:**
 - `--level safe` (default) runs every *default-on* SAFE rule.
@@ -190,17 +193,18 @@ toolism check   SOURCE --baseline FILE [--max-increase 10%|500] [--max-total N] 
                         [--format table|json|markdown] [--output FILE] [--summary-md FILE]
 toolism rules   [--format table|json|markdown] [--output FILE]
 
-toolism diff    SOURCE [--level safe|annotations] [--enable ID]... [--disable ID]...
-                        [--option ID.key=value]... [--output FILE]
+toolism diff    [SOURCE] [--level safe|annotations] [--enable ID]... [--disable ID]...
+                        [--option ID.key=value]... [--output FILE] [--exit-code]
+                        [--mcp COMMAND] [--mcp-timeout SECONDS]
 ```
 
-`measure`, `slim` and `check` also take `--mcp COMMAND` and `--mcp-timeout SECONDS` in place of
+`measure`, `slim`, `diff` and `check` take `--mcp COMMAND` and `--mcp-timeout SECONDS` in place of
 `SOURCE`. `toolism --help` and `toolism <command> --help` are the authoritative reference.
 
 - `SOURCE` is a JSON file, `-` for stdin, or `--mcp "<command>"` for a live stdio server.
 - **Exit codes:**
   - `0` = OK
-  - `1` = budget exceeded (check), or a verification rollback happened (slim `--fail-on-rollback`)
+  - `1` = budget exceeded (check), a verification rollback happened (slim `--fail-on-rollback`), or differences found (diff `--exit-code`)
   - `2` = usage or input error
   - `3` = tokenizer unavailable
 

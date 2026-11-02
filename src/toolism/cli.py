@@ -125,9 +125,9 @@ def _write_file(path: Path, text: str, *, append: bool = False) -> None:
         raise ToolismError(f"cannot write {path}: {exc.strerror or exc}") from None
 
 
-def _emit(text: str, output: Path | None) -> None:
+def _emit(text: str, output: Path | None, *, color: bool | None = None) -> None:
     if output is None:
-        typer.echo(text, nl=False)
+        typer.echo(text, nl=False, color=color)
     else:
         _write_file(output, text)
 
@@ -354,7 +354,9 @@ def slim(
 @app.command()
 @_handle_errors
 def diff(
-    source: SourceArg,
+    source: SourceArg = None,
+    mcp: McpOpt = None,
+    mcp_timeout: McpTimeoutOpt = 60.0,
     level: Annotated[
         Level,
         typer.Option("--level", "-l", help="safe: redundant text; annotations: also lossy text."),
@@ -372,6 +374,10 @@ def diff(
         typer.Option("--option", metavar="RULE.KEY=VALUE", help="Set a rule option. Repeatable."),
     ] = None,
     output: OutputOpt = None,
+    exit_code: Annotated[
+        bool,
+        typer.Option("--exit-code", help="Exit 1 if any tool would change, 0 otherwise."),
+    ] = False,
 ) -> None:
     """Preview per-tool changes as a unified diff; omit unchanged tools."""
     from toolism.pipeline import slim as slim_toolset
@@ -382,7 +388,7 @@ def diff(
     for assignment in option or []:
         rule_key, key, value = parse_option_assignment(assignment)
         options.setdefault(rule_key, {})[key] = value
-    toolset = _load(source, None, 60.0)
+    toolset = _load(source, mcp, mcp_timeout)
     result = slim_toolset(
         toolset,
         level=level.value,
@@ -391,9 +397,15 @@ def diff(
         options=options,
         tokenizer="heuristic",
     )
-    _emit(render_tool_diff(toolset, result.toolset), output)
+    _, color = _style(sys.stdout) if output is None else (DEFAULT_WIDTH, False)
+    rendered = render_tool_diff(toolset, result.toolset, color=color)
+    _emit(rendered, output, color=color)
+    if not rendered:
+        typer.echo("No changes.", err=True)
     for warning in result.report.warnings:
         typer.echo(f"Warning: {warning}", err=True)
+    if exit_code and rendered:
+        raise typer.Exit(EXIT_FAILED)
 
 
 @app.command()

@@ -173,6 +173,37 @@ def test_ungeneratable_schema_is_skipped_not_passed() -> None:
 def test_invalid_schema_is_skipped() -> None:
     result = check_equivalence({"type": 5}, {"type": "string"})
     assert result.verdict is Verdict.SKIPPED
+    assert result.method == "sampled"
+    # {"type": 5} never reaches validator construction: jsonschema builds a
+    # validator for it, and the failure surfaces when the strategy is built.
+    assert "cannot generate instances:" in result.reason
+
+
+def test_validator_construction_failure_is_skipped() -> None:
+    """A schema the validator cannot even be built for SKIPs with its own reason."""
+    result = check_equivalence(["type", "string"], {"type": "string"})
+    assert result.verdict is Verdict.SKIPPED
+    assert result.method == "sampled"
+    assert result.reason.startswith("invalid schema:")
+
+
+def test_strategy_build_failure_is_skipped_not_passed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A from_schema failure must SKIPPED, never EQUIVALENT, in both directions."""
+
+    def _boom(schema: Any) -> Any:
+        raise RuntimeError("no strategy for this schema")
+
+    monkeypatch.setattr("hypothesis_jsonschema.from_schema", _boom)
+    original = {"type": "object", "properties": {"a": {"type": "string"}}, "required": ["a"]}
+    slim = {**original, "maxProperties": 2}  # structural change, so sampling is needed
+    result = check_equivalence(original, slim)
+    assert result.verdict is Verdict.SKIPPED
+    assert result.method == "sampled"
+    assert "cannot generate instances:" in result.reason
+    assert ORIGINAL_TO_SLIM in result.reason
+    assert SLIM_TO_ORIGINAL in result.reason
 
 
 def test_boolean_schemas() -> None:

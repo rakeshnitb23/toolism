@@ -281,7 +281,19 @@ def render_slim_report(
 # ---------------------------------------------------------------------- diff
 
 
-def render_tool_diff(before: ToolSet, after: ToolSet) -> str:
+def _color_diff_line(line: str) -> str:
+    body = line[:-1] if line.endswith("\n") else line
+    nl = "\n" if line.endswith("\n") else ""
+    if body.startswith("@@"):
+        return f"\x1b[36m{body}\x1b[0m{nl}"
+    if body.startswith("-") and not body.startswith("---"):
+        return f"\x1b[31m{body}\x1b[0m{nl}"
+    if body.startswith("+") and not body.startswith("+++"):
+        return f"\x1b[32m{body}\x1b[0m{nl}"
+    return line
+
+
+def render_tool_diff(before: ToolSet, after: ToolSet, *, color: bool = False) -> str:
     """Preview changed tool content, pairing duplicate names by stable occurrence."""
     remaining: defaultdict[str, deque[ToolDef]] = defaultdict(deque)
     for tool in after.function_tools():
@@ -311,6 +323,8 @@ def render_tool_diff(before: ToolSet, after: ToolSet) -> str:
                 tofile=f"{label} (after)",
             )
         )
+    if color:
+        return "".join(_color_diff_line(line) for line in parts)
     return "".join(parts)
 
 

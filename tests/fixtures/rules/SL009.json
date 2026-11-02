@@ -40,5 +40,17 @@
   {
     "name": "custom meta-schema is kept",
     "tool": {"name": "t", "schema": {"$schema": "https://example.com/meta", "type": "object"}}
+  },
+  {
+    "name": "draft-07 schema using dependencies keeps the URI",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-07/schema#", "type": "object", "properties": {"a": {"type": "string"}, "b": {"type": "string"}}, "dependencies": {"a": ["b"]}}}
+  },
+  {
+    "name": "draft-04 schema with boolean exclusiveMinimum keeps the URI",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-04/schema#", "type": "number", "minimum": 0, "exclusiveMinimum": true}}
+  },
+  {
+    "name": "boolean exclusiveMinimum keeps the URI under a later draft",
+    "tool": {"name": "t", "schema": {"$schema": "http://json-schema.org/draft-07/schema#", "type": "number", "minimum": 0, "exclusiveMinimum": true}}
   }
 ]

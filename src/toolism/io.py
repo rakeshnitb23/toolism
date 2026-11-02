@@ -23,6 +23,8 @@ def _reject_constant(name: str) -> Any:
 
 def loads(text: str) -> ToolSet:
     """Parse a JSON string into a :class:`ToolSet`."""
+    if text.startswith("\ufeff"):  # Windows editors and PowerShell save UTF-8 BOMs
+        text = text[1:]
     try:
         document = json.loads(text, parse_constant=_reject_constant)
     except json.JSONDecodeError as exc:

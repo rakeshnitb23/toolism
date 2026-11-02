@@ -35,14 +35,19 @@ __all__ = [
 
 @dataclass(frozen=True)
 class RuleStat:
+    """Token savings attributed to one rule."""
+
     rule_id: str
     name: str
     tokens_saved: int
     tools_changed: tuple[str, ...]
+    """Names of tools whose schemas this rule changed."""
 
 
 @dataclass(frozen=True)
 class ToolStat:
+    """Token counts for one tool before and after slimming."""
+
     name: str
     before: int
     after: int
@@ -69,17 +74,23 @@ class Rollback:
 
 @dataclass(frozen=True)
 class SlimReport:
+    """Token costs, per-rule and per-tool changes, and verification details for a slimming run."""
+
     tokenizer: str
     approximate: bool
     attribution_tokenizer: str
+    """Tokenizer used to attribute token savings to individual rules."""
     level: str
+    """Highest rule safety level enabled for the run."""
     before: int
     after: int
     tool_count: int
     uncounted: tuple[str, ...]
+    """Names of provider built-in tools whose tokens could not be counted."""
     rules: tuple[RuleStat, ...]
     tools: tuple[ToolStat, ...]
     passes: int
+    """Number of content-rule passes that were run."""
     warnings: tuple[str, ...]
     rollbacks: tuple[Rollback, ...]
     verification: tuple[VerificationResult, ...]
@@ -95,6 +106,8 @@ class SlimReport:
 
 @dataclass(frozen=True)
 class SlimResult:
+    """Slimmed tool set and the report describing its changes."""
+
     toolset: ToolSet
     report: SlimReport
 
