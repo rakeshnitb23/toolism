@@ -188,6 +188,29 @@ def test_loads_rejects_nan() -> None:
         loads('[{"name": "a", "input_schema": {"default": NaN}}]')
 
 
+def _deeply_nested_tool(levels: int) -> list[dict[str, object]]:
+    schema: object = {"type": "string"}
+    for _ in range(levels):
+        schema = {"type": "object", "properties": {"a": schema}}
+    return [{"name": "t", "inputSchema": schema}]
+
+
+def test_parse_rejects_deeply_nested_schema_as_input_error() -> None:
+    # #138: a ~3,000-level schema used to crash with RecursionError from
+    # deepcopy; it must now be a plain FormatError, before any recursion.
+    with pytest.raises(FormatError, match="nested too deeply"):
+        parse(_deeply_nested_tool(3000))
+
+
+def test_loads_rejects_deeply_nested_schema_as_input_error() -> None:
+    with pytest.raises(FormatError, match="nested too deeply"):
+        loads(json.dumps(_deeply_nested_tool(3000)))
+
+
+def test_parse_accepts_moderately_nested_schema() -> None:
+    assert len(parse(_deeply_nested_tool(50))) == 1
+
+
 def test_load_from_file_object_and_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
     text = (FIXTURES / "mcp_tools.json").read_text(encoding="utf-8")
     assert len(load(io.StringIO(text))) == 2
