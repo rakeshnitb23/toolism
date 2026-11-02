@@ -164,16 +164,22 @@ def test_invalid_json_reports_position(runner: CliRunner) -> None:
     assert "invalid JSON at line 1, column 12" in result.stderr
 
 
+def _deeply_nested_tool_text(levels: int) -> str:
+    # Build the JSON text iteratively: json.dumps() itself recurses and
+    # would blow the stack on this input before the CLI ever runs.
+    text = '{"type": "string"}'
+    for _ in range(levels):
+        text = '{"type": "object", "properties": {"a": ' + text + "}}"
+    return '[{"name": "t", "inputSchema": ' + text + "}]"
+
+
 @pytest.mark.parametrize("command", ["measure", "slim", "diff"])
 def test_deeply_nested_schema_is_an_input_error_not_internal(
     runner: CliRunner, tmp_path: Path, command: str
 ) -> None:
     # #138: one `error:` line, exit 2, no "internal error" blame line.
-    schema: object = {"type": "string"}
-    for _ in range(3000):
-        schema = {"type": "object", "properties": {"a": schema}}
     path = tmp_path / "deep.json"
-    path.write_text(json.dumps([{"name": "t", "inputSchema": schema}]), encoding="utf-8")
+    path.write_text(_deeply_nested_tool_text(3000), encoding="utf-8")
     result = invoke(runner, command, path)
     assert result.exit_code == 2
     assert result.stderr.startswith("error: ")
@@ -183,11 +189,8 @@ def test_deeply_nested_schema_is_an_input_error_not_internal(
 
 
 def test_deeply_nested_schema_check_is_an_input_error(runner: CliRunner, tmp_path: Path) -> None:
-    schema: object = {"type": "string"}
-    for _ in range(3000):
-        schema = {"type": "object", "properties": {"a": schema}}
     path = tmp_path / "deep.json"
-    path.write_text(json.dumps([{"name": "t", "inputSchema": schema}]), encoding="utf-8")
+    path.write_text(_deeply_nested_tool_text(3000), encoding="utf-8")
     result = invoke(runner, "check", path, "--max-total", "100000")
     assert result.exit_code == 2
     assert result.stderr.startswith("error: ")

@@ -202,9 +202,18 @@ def test_parse_rejects_deeply_nested_schema_as_input_error() -> None:
         parse(_deeply_nested_tool(3000))
 
 
+def _deeply_nested_tool_text(levels: int) -> str:
+    # Build the JSON text iteratively: json.dumps() itself recurses and
+    # would blow the stack on this input before loads() ever runs.
+    text = '{"type": "string"}'
+    for _ in range(levels):
+        text = '{"type": "object", "properties": {"a": ' + text + "}}"
+    return '[{"name": "t", "inputSchema": ' + text + "}]"
+
+
 def test_loads_rejects_deeply_nested_schema_as_input_error() -> None:
     with pytest.raises(FormatError, match="nested too deeply"):
-        loads(json.dumps(_deeply_nested_tool(3000)))
+        loads(_deeply_nested_tool_text(3000))
 
 
 def test_parse_accepts_moderately_nested_schema() -> None:
