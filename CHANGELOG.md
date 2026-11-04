@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Batch persistent Anthropic count-cache writes during `measure` and `slim`, with periodic
+  checkpoints and a final flush, while preserving immediate writes for standalone tokenizer
+  calls. A crash can lose recent updates since the last checkpoint; published snapshots remain
+  complete and valid. Persistence remains opt-in via `TOOLISM_CACHE_DIR` (#145).
+
 ## [0.2.0] - 2026-10-31
 
 toolism's second release lets you see every change before you make it, verifies more precisely,
