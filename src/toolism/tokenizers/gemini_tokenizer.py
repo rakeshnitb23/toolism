@@ -32,6 +32,8 @@ class GeminiTokenizer:
         self.model = model
         self.name = f"gemini:{model}"
         self._client = client if client is not None else self._make_client()
+        self._cache: dict[str, int] = {}
+        self._baseline: int | None = None
 
     @staticmethod
     def _make_client() -> Any:
@@ -58,12 +60,25 @@ class GeminiTokenizer:
         except Exception as exc:
             raise TokenizerUnavailable(f"Gemini count_tokens failed: {exc}") from exc
 
+    def _baseline_tokens(self) -> int:
+        if self._baseline is None:
+            self._baseline = self._count([])
+        return self._baseline
+
     def count_tool(self, tool: ToolDef) -> int:
-        return 0 if tool.opaque else self._count([to_gemini_tool(tool)])
+        if tool.opaque:
+            return 0
+        key = tool.fingerprint()
+        if key not in self._cache:
+            marginal = self._count([to_gemini_tool(tool)]) - self._baseline_tokens()
+            self._cache[key] = max(marginal, 0)
+        return self._cache[key]
 
     def count_tools(self, tools: Sequence[ToolDef]) -> int:
         items = [to_gemini_tool(tool) for tool in tools if not tool.opaque]
-        return self._count(items) if items else 0
+        if not items:
+            return 0
+        return self._count(items) - self._baseline_tokens()
 
     def __repr__(self) -> str:
         return f"<GeminiTokenizer {self.name}>"

@@ -237,7 +237,7 @@ def test_get_tokenizer_gemini(monkeypatch: Any) -> None:
 
     def count_tokens(**kwargs: Any) -> Any:
         calls.append(kwargs)
-        return SimpleNamespace(total_tokens=17)
+        return SimpleNamespace(total_tokens=17 if "config" in kwargs else 2)
 
     client = SimpleNamespace(models=SimpleNamespace(count_tokens=count_tokens))
     monkeypatch.setattr(GeminiTokenizer, "_make_client", staticmethod(lambda: client))
@@ -246,7 +246,7 @@ def test_get_tokenizer_gemini(monkeypatch: Any) -> None:
     assert tok.name == "gemini:gemini-test"
     assert not tok.local
     assert not tok.approximate
-    assert tok.count_tools([TOOL, ToolDef(name="opaque", opaque=True)]) == 17
+    assert tok.count_tools([TOOL, ToolDef(name="opaque", opaque=True)]) == 15
     assert calls[0]["model"] == "gemini-test"
     assert calls[0]["contents"] == "."
     assert calls[0]["config"]["tools"][0]["function_declarations"][0]["name"] == "create_issue"
@@ -255,6 +255,10 @@ def test_get_tokenizer_gemini(monkeypatch: Any) -> None:
         "description": "Create an issue.",
         "parameters": TOOL.input_schema,
     }
+    assert "config" not in calls[1]
+    assert tok.count_tool(TOOL) == 15
+    assert tok.count_tool(TOOL) == 15
+    assert len(calls) == 3
     assert to_gemini_tool(ToolDef(name="minimal")) == {"name": "minimal"}
 
 
