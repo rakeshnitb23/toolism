@@ -9,6 +9,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 
 - `toolism rules RULE`: show a single rule by ID or name, with full details and options.
+- `toolism doctor` reports local versions and optional dependencies for bug reports,
+  without network requests or revealing API keys.
 
 ### Fixed
 
@@ -45,9 +47,6 @@ Thank you to everyone who contributed, including 19 people who made their first 
 to toolism in this release.
 
 ### Added
-
-- `toolism doctor` reports local versions and optional dependencies for bug reports,
-  without network requests or revealing API keys.
 
 - `toolism diff`: per-tool unified previews of changed descriptions and input schemas,
   with the same level/rule selection as `slim`, stdin and output-file support, and
