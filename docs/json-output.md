@@ -14,8 +14,8 @@ scripts and dashboards. The reports are versioned: every one carries
 - `kind` tells you which top-level shape to expect: `measure`, `slim`,
   or `check`.
 
-Token counts are integers everywhere. Only averages and percentages are
-floats, rounded to 2 decimals. Percentages in `measure` are per-tool shares
+Token counts are integers everywhere. Averages and percentages are
+floats, rounded to 2 decimals. Optional cost estimates are unrounded floats. Percentages in `measure` are per-tool shares
 of the total; `slim` percentages are savings shares.
 
 ## `measure`
@@ -74,6 +74,13 @@ Top-level fields:
 | `tools` | One entry per tool: `name`, `tokens`, `percent` (share of the total). Sorted by tokens descending in the table/markdown renderings; the JSON list follows the report order. |
 | `uncounted` | Provider built-ins that were not counted, by name. |
 | `warnings` | Non-fatal warnings from counting. |
+
+With `measure --price USD_PER_MTOK`, an additive `cost` object contains
+`usd_per_million_input_tokens` (the supplied price) and `usd_per_1000_requests`
+(`total_tokens / 1000 * price`). It is absent when `--price` is omitted. For example,
+1,250 tokens at `--price 3` cost $3.75 per 1,000 requests. Only counted tool-definition
+tokens are included, with the same accuracy as the selected tokenizer; provider
+wrapping, caching, other input tokens, and output tokens are not included.
 
 ## `slim`
 

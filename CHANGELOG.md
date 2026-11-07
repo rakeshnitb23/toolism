@@ -11,6 +11,8 @@ All notable changes to this project are documented here. The format follows
 - `toolism rules RULE`: show a single rule by ID or name, with full details and options.
 - `toolism doctor` reports local versions and optional dependencies for bug reports,
   without network requests or revealing API keys.
+- `toolism measure --price USD_PER_MTOK` estimates tool-definition cost per 1,000
+  requests in table, Markdown and JSON reports, using a user-supplied price.
 
 ### Fixed
 

@@ -392,6 +392,20 @@ runner and don't need to be set by hand.
 - **Loading fewer tools** (tool search or dynamic selection) cuts the number of tools sent;
   toolism cuts the cost of each tool you do send.
 
+## Estimate tool-definition cost
+
+Pass the provider's current input-token price yourself:
+
+```sh
+toolism measure tools.json --price 3
+```
+
+`--price` is a positive, finite USD price per million input tokens. Table and Markdown
+reports add the cost per 1,000 requests; JSON adds a `cost` object only when requested.
+This uses the counted tool-definition tokens and inherits the tokenizer's accuracy.
+It excludes provider wrapping, caching, other prompt content, and output tokens.
+No provider prices are bundled with toolism.
+
 ## FAQ
 
 **How much money does this save?** Tokens saved per request × requests ÷ 1,000,000 × your

@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import io
 import json
+import math
 from collections import Counter, defaultdict, deque
 from collections.abc import Sequence
 from difflib import unified_diff
@@ -78,8 +79,28 @@ def _md_table(headers: Sequence[str], rows: Sequence[Sequence[str]], align: str)
 # ------------------------------------------------------------------- measure
 
 
-def token_report_to_dict(report: TokenReport) -> dict[str, Any]:
+def _usd(value: float) -> str:
+    """Dollars with two decimals, or enough to show two significant digits below one cent."""
+    decimals = 2
+    if 0 < value < 0.1:
+        decimals = min(6, 1 - math.floor(math.log10(value)))
+    return f"${value:,.{decimals}f}"
+
+
+def _cost(total: int, price: float) -> dict[str, float]:
+    if not math.isfinite(price) or price <= 0:
+        raise ValueError("--price must be a finite number greater than zero")
+    per_1000 = total / 1000 * price
+    if not math.isfinite(per_1000):
+        raise ValueError("--price is too large for this token count")
     return {
+        "usd_per_million_input_tokens": price,
+        "usd_per_1000_requests": per_1000,
+    }
+
+
+def token_report_to_dict(report: TokenReport, *, price: float | None = None) -> dict[str, Any]:
+    result: dict[str, Any] = {
         "toolism_report": REPORT_VERSION,
         "kind": "measure",
         "tokenizer": report.tokenizer,
@@ -94,13 +115,24 @@ def token_report_to_dict(report: TokenReport) -> dict[str, Any]:
         "uncounted": list(report.uncounted),
         "warnings": list(report.warnings),
     }
+    if price is not None:
+        result["cost"] = _cost(report.total, price)
+    return result
 
 
 def render_token_report(
-    report: TokenReport, fmt: Format = "table", *, width: int = 100, color: bool = False
+    report: TokenReport,
+    fmt: Format = "table",
+    *,
+    width: int = 100,
+    color: bool = False,
+    price: float | None = None,
 ) -> str:
     if fmt == "json":
-        return json.dumps(token_report_to_dict(report), indent=2, ensure_ascii=False) + "\n"
+        return (
+            json.dumps(token_report_to_dict(report, price=price), indent=2, ensure_ascii=False)
+            + "\n"
+        )
     ranked = sorted(report.tools, key=lambda t: (-t.tokens, t.name))
     shown, hidden = ranked[:TOP_N], ranked[TOP_N:]
     summary = (
@@ -112,6 +144,13 @@ def render_token_report(
         notes.append(f"… {len(hidden)} more tools ({_n(sum(t.tokens for t in hidden))} tokens)")
     if report.uncounted:
         notes.append(f"Not counted (provider built-ins): {', '.join(report.uncounted)}")
+
+    if price is not None:
+        cost = _cost(report.total, price)
+        notes.append(
+            f"At {_usd(price)} per million input tokens: "
+            f"{_usd(cost['usd_per_1000_requests'])} per 1,000 requests"
+        )
 
     if fmt == "markdown":
         rows = [
