@@ -19,6 +19,8 @@ All notable changes to this project are documented here. The format follows
   remote and disabled entries are skipped. Failure reasons leave out the server's command line
   and mask `env` and argument values. JSON output uses the new `measure_sources` report kind.
   (#141)
+- Gemini tool schemas now use the SDK's full JSON Schema field, allowing schemas with `$defs` and
+  `$ref` to pass SDK validation without a live API key.
 
 ### Fixed
 
@@ -56,7 +58,6 @@ to toolism in this release.
 
 ### Added
 
-- Exact `gemini:<model>` token counts via Google's `count_tokens` API.
 - `toolism diff`: per-tool unified previews of changed descriptions and input schemas,
   with the same level/rule selection as `slim`, stdin and output-file support, and
   terminal colour (`-` red, `+` green, `@@` cyan) that respects `NO_COLOR`.

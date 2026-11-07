@@ -2512,8 +2512,8 @@ dev = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'all'", specifier = ">=0.40" },
     { name = "anthropic", marker = "extra == 'anthropic'", specifier = ">=0.40" },
-    { name = "google-genai", marker = "extra == 'all'", specifier = ">=1.0" },
-    { name = "google-genai", marker = "extra == 'gemini'", specifier = ">=1.0" },
+    { name = "google-genai", marker = "extra == 'all'", specifier = ">=1.75.0" },
+    { name = "google-genai", marker = "extra == 'gemini'", specifier = ">=1.75.0" },
     { name = "hypothesis", marker = "extra == 'all'", specifier = ">=6.100" },
     { name = "hypothesis", marker = "extra == 'verify'", specifier = ">=6.100" },
     { name = "hypothesis-jsonschema", marker = "extra == 'all'", specifier = ">=0.23" },

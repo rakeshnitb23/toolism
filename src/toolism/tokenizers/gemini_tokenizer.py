@@ -18,7 +18,7 @@ def to_gemini_tool(tool: ToolDef) -> dict[str, Any]:
     if tool.description is not None:
         declaration["description"] = tool.description
     if isinstance(tool.input_schema, dict):
-        declaration["parameters"] = tool.input_schema
+        declaration["parameters_json_schema"] = tool.input_schema
     return declaration
 
 

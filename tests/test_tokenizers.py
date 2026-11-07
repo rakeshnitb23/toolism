@@ -253,13 +253,34 @@ def test_get_tokenizer_gemini(monkeypatch: Any) -> None:
     assert calls[0]["config"]["tools"][0]["function_declarations"][0] == {
         "name": "create_issue",
         "description": "Create an issue.",
-        "parameters": TOOL.input_schema,
+        "parameters_json_schema": TOOL.input_schema,
     }
     assert "config" not in calls[1]
     assert tok.count_tool(TOOL) == 15
     assert tok.count_tool(TOOL) == 15
     assert len(calls) == 3
     assert to_gemini_tool(ToolDef(name="minimal")) == {"name": "minimal"}
+
+
+def test_gemini_json_schema_validates_with_google_genai() -> None:
+    types = pytest.importorskip("google.genai.types")
+    from toolism.tokenizers.gemini_tokenizer import to_gemini_tool
+
+    schema = {
+        "type": "object",
+        "properties": {"item": {"$ref": "#/$defs/Item"}},
+        "$defs": {"Item": {"type": "string", "const": "example"}},
+        "additionalProperties": False,
+    }
+    declaration = to_gemini_tool(ToolDef(name="complex_schema", input_schema=schema))
+
+    config = types.CountTokensConfig.model_validate(
+        {"tools": [{"function_declarations": [declaration]}]}
+    )
+
+    function = config.tools[0].function_declarations[0]
+    assert function.parameters_json_schema == schema
+    assert function.parameters is None
 
 
 def test_gemini_setup_errors(monkeypatch: Any) -> None:
