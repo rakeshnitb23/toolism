@@ -632,3 +632,302 @@ def test_concurrent_readers_see_complete_snapshots(tmp_path: Path) -> None:
         finally:
             stop.set()
         assert reader.result(timeout=5) > 0
+
+
+@pytest.mark.parametrize("operation", ["measure", "slim"])
+def test_large_run_batches_writes_and_flushes_before_return(
+    monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    from toolism.tokenizers import _cache
+
+    tools = ToolSet(
+        tuple(
+            ToolDef(f"tool{i}", input_schema={"type": "object", "title": "Drop"})
+            for i in range(100)
+        ),
+        ToolFormat.MCP,
+    )
+    writes = 0
+    original = _cache.SnapshotCache._write
+
+    def write(cache: Any, encoded: bytes) -> Any:
+        nonlocal writes
+        writes += 1
+        return original(cache, encoded)
+
+    monkeypatch.setattr(_cache.SnapshotCache, "_write", write)
+
+    def run(counter: AnthropicTokenizer) -> Any:
+        if operation == "measure":
+            return measure(tools, counter)
+        return slim(tools, level="annotations", tokenizer=counter).report
+
+    first, cold = tokenizer(monkeypatch)
+    expected = run(first)
+    assert len(cold.calls) == (103 if operation == "measure" else 204)
+    assert 1 < writes <= 10
+    published = writes
+    second, warm = tokenizer(monkeypatch)
+    assert run(second) == expected
+    assert warm.calls == []
+    assert writes == published
+
+
+def test_batch_checkpoints_nested_scope_and_final_tail(tmp_path: Path) -> None:
+    from toolism.tokenizers._cache import SnapshotCache
+
+    cache = SnapshotCache(tmp_path, "context")
+    keys = [cache.key("marginal", i) for i in range(35)]
+    assert hasattr(cache, "batch")
+    with cache.batch():
+        cache.put(keys[0], 0)
+        assert SnapshotCache(tmp_path, "context").get(keys[0]) == 0
+        with cache.batch():
+            for i in range(1, 32):
+                cache.put(keys[i], i)
+        assert SnapshotCache(tmp_path, "context").get(keys[31]) is None
+        cache.put(keys[32], 32)
+        assert SnapshotCache(tmp_path, "context").get(keys[32]) == 32
+        cache.put(keys[33], 33)
+        assert SnapshotCache(tmp_path, "context").get(keys[33]) is None
+    assert SnapshotCache(tmp_path, "context").get(keys[33]) == 33
+    cache.put(keys[34], 34)
+    assert SnapshotCache(tmp_path, "context").get(keys[34]) == 34
+
+
+def test_batch_flushes_on_exception_and_retries_failed_publication(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from toolism.tokenizers import _cache
+
+    cache = _cache.SnapshotCache(tmp_path, "context")
+    first, second = cache.key("marginal", 1), cache.key("marginal", 2)
+    assert hasattr(cache, "batch")
+
+    def run_then_fail(entries: list[tuple[str | None, int]]) -> None:
+        with cache.batch():
+            for key, value in entries:
+                cache.put(key, value)
+            raise RuntimeError("provider failed")
+
+    with pytest.raises(RuntimeError, match="provider failed"):
+        run_then_fail([(first, 1), (second, 2)])
+    assert _cache.SnapshotCache(tmp_path, "context").get(second) == 2
+    previous = cache.path.read_bytes()
+    with monkeypatch.context() as broken:
+        broken.setattr(_cache.os, "replace", lambda *a: (_ for _ in ()).throw(OSError("disk")))
+        with pytest.raises(RuntimeError, match="provider failed"):
+            run_then_fail([(second, 3)])
+    assert cache.path.read_bytes() == previous
+    assert not list(tmp_path.glob(".toolism-counts-*.tmp"))
+    with cache.batch():
+        assert cache.get(second) == 3
+    assert _cache.SnapshotCache(tmp_path, "context").get(second) == 3
+
+
+@pytest.mark.parametrize("failure", ["fdopen", "fsync", "replace", "nonregular"])
+def test_snapshot_write_reports_publication_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, failure: str
+) -> None:
+    from toolism.tokenizers import _cache
+
+    cache = _cache.SnapshotCache(tmp_path, "context")
+    encoded = cache._encode()
+    assert cache._write(encoded) is True
+    if failure == "nonregular":
+        cache.path.unlink()
+        cache.path.mkdir()
+    else:
+        monkeypatch.setattr(_cache.os, failure, lambda *a: (_ for _ in ()).throw(OSError("disk")))
+    assert cache._write(encoded) is False
+    assert not list(tmp_path.glob(".toolism-counts-*.tmp"))
+
+
+@pytest.mark.parametrize("rollback", [False, True])
+def test_batch_expiry_discards_pending_generation(tmp_path: Path, rollback: bool) -> None:
+    from toolism.tokenizers import _cache
+
+    now = [1000.0]
+    cache = _cache.SnapshotCache(tmp_path, "context", clock=lambda: now[0])
+    keys = [cache.key("marginal", i) for i in range(3)]
+    assert hasattr(cache, "batch")
+    with cache.batch():
+        cache.put(keys[0], 0)
+        cache.put(keys[1], 1)
+        now[0] += -1 if rollback else _cache.TTL_SECONDS
+    assert json.loads(cache.path.read_bytes())["entries"] == {keys[0]: 0}
+    with cache.batch():
+        cache.put(keys[2], 2)
+        fresh = _cache.SnapshotCache(tmp_path, "context", clock=lambda: now[0])
+        assert fresh.get(keys[2]) == 2
+        assert fresh.get(keys[1]) is None
+
+
+@pytest.mark.parametrize("before_replace", [False, True])
+def test_abrupt_exit_preserves_checkpoint(tmp_path: Path, before_replace: bool) -> None:
+    from toolism.tokenizers._cache import SnapshotCache
+
+    assert hasattr(SnapshotCache, "batch")
+    code = """
+import os, sys
+from pathlib import Path
+from toolism.tokenizers import _cache
+cache = _cache.SnapshotCache(Path(sys.argv[1]), 'context')
+with cache.batch():
+    cache.put(cache.key('marginal', 0), 0)
+    for i in range(1, 32):
+        cache.put(cache.key('marginal', i), i)
+    if sys.argv[2] == 'True':
+        _cache.os.replace = lambda *a: os._exit(17)
+        cache.put(cache.key('marginal', 32), 32)
+    os._exit(17)
+"""
+    result = subprocess.run(
+        [sys.executable, "-B", "-c", code, str(tmp_path), str(before_replace)],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 17, result.stderr
+    fresh = SnapshotCache(tmp_path, "context")
+    assert fresh.get(fresh.key("marginal", 0)) == 0
+    assert all(fresh.get(fresh.key("marginal", i)) is None for i in range(1, 33))
+
+
+def test_failed_checkpoints_do_not_retry_every_put(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from toolism.tokenizers._cache import SnapshotCache
+
+    attempts = 0
+
+    def fail(*args: Any) -> bool:
+        nonlocal attempts
+        attempts += 1
+        return False
+
+    cache = SnapshotCache(tmp_path, "context")
+    monkeypatch.setattr(cache, "_write", fail)
+    assert hasattr(cache, "batch")
+    with cache.batch():
+        for i in range(100):
+            cache.put(cache.key("marginal", i), i)
+    assert 1 < attempts <= 10
+    assert cache.get(cache.key("marginal", 99)) == 99
+
+
+def test_provider_error_flushes_completed_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+    from toolism.errors import TokenizerUnavailable
+
+    counter, client = tokenizer(monkeypatch)
+
+    def fail_beta(**kwargs: Any) -> Any:
+        tools = kwargs.get("tools", [])
+        if len(tools) == 1 and tools[0]["name"] == "beta":
+            raise RuntimeError("beta unavailable")
+        return client.count(**kwargs)
+
+    client.messages.count_tokens = fail_beta
+    with pytest.raises(TokenizerUnavailable, match="beta unavailable"):
+        measure(TOOLSET, counter)
+    second, warm = tokenizer(monkeypatch)
+    second.count_tool(TOOLS[0])
+    assert warm.calls == []
+    second.count_tool(TOOLS[1])
+    assert len(warm.calls) == 1
+
+
+@pytest.mark.parametrize("setting", ["unset", "empty", "injected", "custom-headers"])
+def test_high_level_disabled_cache_has_no_side_effects(
+    monkeypatch: pytest.MonkeyPatch, cache_directory: Path, setting: str
+) -> None:
+    if setting == "unset":
+        monkeypatch.delenv("TOOLISM_CACHE_DIR")
+    elif setting == "empty":
+        monkeypatch.setenv("TOOLISM_CACHE_DIR", "")
+    elif setting == "custom-headers":
+        monkeypatch.setenv("ANTHROPIC_CUSTOM_HEADERS", "custom")
+
+    def unexpected(_: str) -> str:
+        pytest.fail("Disabled persistence must not look up SDK metadata")
+
+    monkeypatch.setattr(anthropic_module, "version", unexpected)
+    if setting == "injected":
+        counter = AnthropicTokenizer("m", client=CountingClient())
+    else:
+        counter, _ = tokenizer(monkeypatch)
+    assert measure(TOOLSET, counter).total > 0
+    assert slim(TOOLSET, level="annotations", tokenizer=counter).report.before > 0
+    assert not cache_directory.exists()
+
+
+def test_custom_tokenizer_needs_no_batch_method() -> None:
+    class CustomTokenizer:
+        name = "custom"
+        local = False
+        approximate = False
+
+        def count_tool(self, tool: ToolDef) -> int:
+            return 1
+
+        def count_tools(self, tools: Any) -> int:
+            return 123
+
+    counter = CustomTokenizer()
+    assert measure(TOOLSET, counter).total == 123
+    report = slim(TOOLSET, rules=[], tokenizer=counter).report
+    assert report.before == report.after == 123
+
+
+def test_batch_preserves_bounds_and_rejects_invalid_updates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from toolism.tokenizers import _cache
+
+    monkeypatch.setattr(_cache, "MAX_ENTRIES", 2)
+    cache = _cache.SnapshotCache(tmp_path, "context")
+    assert hasattr(cache, "batch")
+    with cache.batch():
+        cache.put(None, 1)
+        cache.put("invalid", 1)
+        cache.put(cache.key("marginal", 0), -1)
+    assert not cache.path.exists()
+    with cache.batch():
+        for i in range(35):
+            cache.put(cache.key("marginal", i), i)
+            assert len(cache._entries) <= 2
+    fresh = _cache.SnapshotCache(tmp_path, "context")
+    assert fresh.get(fresh.key("marginal", 32)) is None
+    assert fresh.get(fresh.key("marginal", 33)) == 33
+    assert fresh.get(fresh.key("marginal", 34)) == 34
+
+
+@pytest.mark.parametrize("rollback", [False, True])
+def test_expiry_during_checkpoint_preserves_first_fresh_publication(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, rollback: bool
+) -> None:
+    from toolism.tokenizers import _cache
+
+    now = [1000.0]
+    cache = _cache.SnapshotCache(tmp_path, "context", clock=lambda: now[0])
+    old, fresh = cache.key("marginal", "old"), cache.key("marginal", "fresh")
+    original_encode = cache._encode
+    crossed = False
+
+    def encode() -> bytes:
+        nonlocal crossed
+        encoded = original_encode()
+        if not crossed:
+            crossed = True
+            now[0] += -1 if rollback else _cache.TTL_SECONDS
+        return encoded
+
+    monkeypatch.setattr(cache, "_encode", encode)
+    with cache.batch():
+        cache.put(old, 1)
+        assert not cache.path.exists()
+        cache.put(fresh, 2)
+        restored = _cache.SnapshotCache(tmp_path, "context", clock=lambda: now[0])
+        assert restored.get(fresh) == 2
+        assert restored.get(old) is None
