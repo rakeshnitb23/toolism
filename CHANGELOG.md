@@ -22,6 +22,11 @@ All notable changes to this project are documented here. The format follows
 - Gemini tool schemas now use the SDK's full JSON Schema field, allowing schemas with `$defs` and
   `$ref` to pass SDK validation without a live API key.
 
+### Changed
+
+- SL008 now also drops `additionalProperties: {}`, `minLength: 0`, `minItems: 0`,
+  `minProperties: 0` and `uniqueItems: false`, which all equal the JSON Schema default.
+
 ### Fixed
 
 - Deeply nested schemas (about 3,000 levels) no longer crash `measure`, `slim`,

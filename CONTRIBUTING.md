@@ -194,8 +194,8 @@ Each of these makes a good first issue:
    `src/toolism/__about__.py`; updates `version` and `date-released` in `CITATION.cff`; moves the
    CHANGELOG's `Unreleased` section under the new version with a short `Highlights` list, and
    updates the compare links at the end of `CHANGELOG.md`; updates the version in the README's
-   Action, pre-commit and cache examples; and regenerates the benchmark with
-   `uv run python bench/run.py`.
+   Action and pre-commit examples and the [cache example](docs/token-cache.md); and regenerates the
+   benchmark with `uv run python bench/run.py`.
 2. After it merges, tag that commit `vX.Y.Z` and push the tag. The `Release` workflow checks that
    the tag matches `__version__`, builds, runs the wheel once, publishes to PyPI with trusted
    publishing, and creates the GitHub release from the CHANGELOG plus GitHub's generated list of
