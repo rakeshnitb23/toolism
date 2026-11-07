@@ -79,6 +79,14 @@ def _md_table(headers: Sequence[str], rows: Sequence[Sequence[str]], align: str)
 # ------------------------------------------------------------------- measure
 
 
+def _usd(value: float) -> str:
+    """Dollars with two decimals, or enough to show two significant digits below one cent."""
+    decimals = 2
+    if 0 < value < 0.1:
+        decimals = min(6, 1 - math.floor(math.log10(value)))
+    return f"${value:,.{decimals}f}"
+
+
 def _cost(total: int, price: float) -> dict[str, float]:
     if not math.isfinite(price) or price <= 0:
         raise ValueError("--price must be a finite number greater than zero")
@@ -140,8 +148,8 @@ def render_token_report(
     if price is not None:
         cost = _cost(report.total, price)
         notes.append(
-            f"At ${price:.2f} per million input tokens: "
-            f"${cost['usd_per_1000_requests']:.2f} per 1,000 requests"
+            f"At {_usd(price)} per million input tokens: "
+            f"{_usd(cost['usd_per_1000_requests'])} per 1,000 requests"
         )
 
     if fmt == "markdown":

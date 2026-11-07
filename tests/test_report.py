@@ -227,3 +227,9 @@ def test_measure_cost_rejects_overflow() -> None:
     report = TokenReport("heuristic", True, 10000, 1, (ToolCount("search", 10000),))
     with pytest.raises(ValueError, match="too large"):
         token_report_to_dict(report, price=1e308)
+
+
+def test_measure_price_note_keeps_sub_cent_precision() -> None:
+    report = TokenReport("heuristic", True, 700, 1, (ToolCount("search", 700),))
+    rendered = render_token_report(report, price=0.075)
+    assert "At $0.075 per million input tokens: $0.052 per 1,000 requests" in rendered
