@@ -7,6 +7,7 @@ import os
 from toolism.errors import TokenizerError
 from toolism.tokenizers.anthropic_tokenizer import AnthropicTokenizer
 from toolism.tokenizers.base import TextTokenizer, Tokenizer
+from toolism.tokenizers.gemini_tokenizer import GeminiTokenizer
 from toolism.tokenizers.heuristic import HeuristicTokenizer
 from toolism.tokenizers.tiktoken_tokenizer import TiktokenTokenizer
 
@@ -14,6 +15,7 @@ __all__ = [
     "DEFAULT_TOKENIZER",
     "ENV_VAR",
     "AnthropicTokenizer",
+    "GeminiTokenizer",
     "HeuristicTokenizer",
     "TextTokenizer",
     "TiktokenTokenizer",
@@ -23,7 +25,7 @@ __all__ = [
 
 DEFAULT_TOKENIZER = "tiktoken:o200k_base"
 ENV_VAR = "TOOLISM_TOKENIZER"
-_FORMS = "use 'heuristic', 'tiktoken:<encoding>' or 'anthropic:<model>'"
+_FORMS = "use 'heuristic', 'tiktoken:<encoding>', 'anthropic:<model>' or 'gemini:<model>'"
 
 
 def get_tokenizer(spec: str | Tokenizer | None = None) -> Tokenizer:
@@ -46,4 +48,10 @@ def get_tokenizer(spec: str | Tokenizer | None = None) -> Tokenizer:
                 "the anthropic tokenizer needs a model", hint="e.g. anthropic:claude-sonnet-5"
             )
         return AnthropicTokenizer(argument)
+    if kind == "gemini":
+        if not argument:
+            raise TokenizerError(
+                "the gemini tokenizer needs a model", hint="e.g. gemini:gemini-2.5-flash"
+            )
+        return GeminiTokenizer(argument)
     raise TokenizerError(f"unknown tokenizer {text!r}", hint=_FORMS)

@@ -19,6 +19,10 @@ All notable changes to this project are documented here. The format follows
   remote and disabled entries are skipped. Failure reasons leave out the server's command line
   and mask `env` and argument values. JSON output uses the new `measure_sources` report kind.
   (#141)
+- Gemini tool schemas now use the SDK's full JSON Schema field, allowing schemas with `$defs` and
+  `$ref` to pass SDK validation without a live API key.
+- The Gemini extra requires Python 3.11 or newer because `google-genai` 3.0.0, which adds full
+  JSON Schema support, no longer supports Python 3.10.
 
 ### Changed
 
