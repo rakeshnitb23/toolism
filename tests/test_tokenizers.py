@@ -292,8 +292,8 @@ def test_gemini_requires_python_311_for_full_json_schema(monkeypatch: Any) -> No
 
 
 def test_gemini_setup_errors(monkeypatch: Any) -> None:
-    from toolism.tokenizers import GeminiTokenizer
     import toolism.tokenizers.gemini_tokenizer as gemini_tokenizer
+    from toolism.tokenizers import GeminiTokenizer
 
     monkeypatch.setattr(gemini_tokenizer, "_python_version", lambda: (3, 14))
 
