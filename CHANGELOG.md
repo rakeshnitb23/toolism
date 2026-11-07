@@ -13,6 +13,12 @@ All notable changes to this project are documented here. The format follows
   without network requests or revealing API keys.
 - `toolism measure --price USD_PER_MTOK` estimates tool-definition cost per 1,000
   requests in table, Markdown and JSON reports, using a user-supplied price.
+- `toolism measure --mcp-config FILE` measures every stdio server in an MCP client config
+  (`claude_desktop_config.json`, `.cursor/mcp.json`, `.mcp.json`) and reports one row per server
+  plus a total over all their tools. A failing server is reported without stopping the others;
+  remote and disabled entries are skipped. Failure reasons leave out the server's command line
+  and mask `env` and argument values. JSON output uses the new `measure_sources` report kind.
+  (#141)
 
 ### Fixed
 
