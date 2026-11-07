@@ -75,7 +75,7 @@ def test_version(runner: CliRunner) -> None:
 def test_help_lists_commands(runner: CliRunner) -> None:
     result = invoke(runner, "--help")
     assert result.exit_code == 0
-    for command in ("measure", "slim", "diff", "check", "rules"):
+    for command in ("measure", "slim", "diff", "check", "rules", "doctor"):
         assert command in result.stdout
 
 
@@ -163,6 +163,40 @@ def test_invalid_json_reports_position(runner: CliRunner) -> None:
     result = invoke(runner, "measure", "-", input='{"tools": [}')
     assert result.exit_code == 2
     assert "invalid JSON at line 1, column 12" in result.stderr
+
+
+def _deeply_nested_tool_text(levels: int) -> str:
+    # Build the JSON text iteratively: json.dumps() itself recurses and
+    # would blow the stack on this input before the CLI ever runs.
+    text = '{"type": "string"}'
+    for _ in range(levels):
+        text = '{"type": "object", "properties": {"a": ' + text + "}}"
+    return '[{"name": "t", "inputSchema": ' + text + "}]"
+
+
+@pytest.mark.parametrize("command", ["measure", "slim", "diff"])
+def test_deeply_nested_schema_is_an_input_error_not_internal(
+    runner: CliRunner, tmp_path: Path, command: str
+) -> None:
+    # #138: one `error:` line, exit 2, no "internal error" blame line.
+    path = tmp_path / "deep.json"
+    path.write_text(_deeply_nested_tool_text(3000), encoding="utf-8")
+    result = invoke(runner, command, path)
+    assert result.exit_code == 2
+    assert result.stderr.startswith("error: ")
+    assert "nested too deeply" in result.stderr
+    assert "internal error" not in result.output
+    assert "Traceback" not in result.output
+
+
+def test_deeply_nested_schema_check_is_an_input_error(runner: CliRunner, tmp_path: Path) -> None:
+    path = tmp_path / "deep.json"
+    path.write_text(_deeply_nested_tool_text(3000), encoding="utf-8")
+    result = invoke(runner, "check", path, "--max-total", "100000")
+    assert result.exit_code == 2
+    assert result.stderr.startswith("error: ")
+    assert "nested too deeply" in result.stderr
+    assert "internal error" not in result.output
 
 
 def test_missing_input_file_shows_hint(runner: CliRunner) -> None:
@@ -1042,3 +1076,79 @@ def test_rules_unknown_uses_existing_error(runner: CliRunner, selector: str) -> 
     assert result.stderr == (
         f"error: unknown rule {selector!r}\nhint: run 'toolism rules' to list rules\n"
     )
+
+
+@pytest.mark.parametrize("key_value", [None, "", "private-api-key-sentinel"])
+def test_doctor_reports_versions_without_secrets_or_network(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, key_value: str | None
+) -> None:
+    import importlib.metadata
+    import platform
+    import socket
+
+    installed = {"typer": "1.0", "rich": "2.0", "tiktoken": "3.0", "hypothesis": "4.0"}
+
+    def version(name: str) -> str:
+        if name in installed:
+            return installed[name]
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    def no_network(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("doctor must not make network requests")
+
+    monkeypatch.setattr(importlib.metadata, "version", version)
+    monkeypatch.setattr(platform, "python_version", lambda: "3.13.0")
+    monkeypatch.setattr(platform, "system", lambda: "TestOS")
+    monkeypatch.setattr(platform, "release", lambda: "1.0")
+    monkeypatch.setattr(socket, "create_connection", no_network)
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    for module in (
+        "anthropic",
+        "mcp",
+        "hypothesis",
+        "hypothesis_jsonschema",
+        "jsonschema",
+        "tiktoken",
+    ):
+        monkeypatch.setitem(sys.modules, module, None)
+    if key_value is None:
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    else:
+        monkeypatch.setenv("ANTHROPIC_API_KEY", key_value)
+    monkeypatch.setenv("UNRELATED_SECRET", "unrelated-secret-sentinel")
+
+    result = invoke(runner, "doctor")
+
+    assert result.exit_code == 0, result.output
+    assert f"toolism: {__version__}" in result.stdout
+    assert "Python: 3.13.0" in result.stdout
+    assert "OS: TestOS 1.0" in result.stdout
+    for name, value in installed.items():
+        assert f"{name}: {value}" in result.stdout
+    for name in ("mcp", "anthropic", "hypothesis-jsonschema", "jsonschema"):
+        assert f"{name}: not installed" in result.stdout
+    assert f"ANTHROPIC_API_KEY: {'set' if key_value else 'not set'}" in result.stdout
+    assert "private-api-key-sentinel" not in result.output
+    assert "unrelated-secret-sentinel" not in result.output
+    assert result.stderr == ""
+
+
+def test_doctor_reports_all_installed_extras(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import importlib.metadata
+
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "9.8.7")
+    result = invoke(runner, "doctor")
+    assert result.exit_code == 0, result.output
+    for name in (
+        "typer",
+        "rich",
+        "tiktoken",
+        "mcp",
+        "anthropic",
+        "hypothesis",
+        "hypothesis-jsonschema",
+        "jsonschema",
+    ):
+        assert f"{name}: 9.8.7" in result.stdout
