@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Deeply nested schemas (about 3,000 levels) no longer crash `measure`, `slim`,
+  `diff`, and `check` with an internal `RecursionError`. Tool items nested
+  deeper than 200 levels are now rejected at parse time as a `FormatError`,
+  so the CLI prints a single input-error line and exits 2, and the Python
+  API raises `FormatError`.
+
 ## [0.2.0] - 2026-10-31
 
 toolism's second release lets you see every change before you make it, verifies more precisely,
@@ -33,6 +41,9 @@ Thank you to everyone who contributed, including 19 people who made their first 
 to toolism in this release.
 
 ### Added
+
+- `toolism doctor` reports local versions and optional dependencies for bug reports,
+  without network requests or revealing API keys.
 
 - `toolism diff`: per-tool unified previews of changed descriptions and input schemas,
   with the same level/rule selection as `slim`, stdin and output-file support, and

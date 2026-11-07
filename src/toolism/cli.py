@@ -88,6 +88,19 @@ def _handle_errors(func: F) -> F:
                 raise
             _print_error(exc.message, exc.hint)
             raise typer.Exit(EXIT_ERROR) from None
+        except RecursionError:
+            # A stack exhaustion reached from the CLI is, for input that
+            # arrives through load/parse, a too-deep schema (#138) — report
+            # it as one input-error line, not as an internal error. Genuine
+            # toolism bugs are still visible with TOOLISM_DEBUG=1, which
+            # reraises before this branch.
+            if os.environ.get("TOOLISM_DEBUG"):
+                raise
+            _print_error(
+                "input is nested too deeply",
+                "flatten the schema or split it into smaller tools",
+            )
+            raise typer.Exit(EXIT_ERROR) from None
         except Exception as exc:
             # typer.Exit and friends (typer may vendor click, so match on the module)
             if type(exc).__module__.split(".")[0] in ("typer", "click"):
@@ -215,6 +228,36 @@ def _root(
 
 
 # ------------------------------------------------------------------ commands
+
+
+@app.command()
+@_handle_errors
+def doctor() -> None:
+    """Print local versions and optional dependencies for a bug report (no network)."""
+    import platform
+    from importlib.metadata import PackageNotFoundError, version
+
+    typer.echo(f"toolism: {__version__}")
+    typer.echo(f"Python: {platform.python_version()}")
+    typer.echo(f"OS: {platform.system()} {platform.release()}")
+    for package in (
+        "typer",
+        "rich",
+        "tiktoken",
+        "mcp",
+        "anthropic",
+        "hypothesis",
+        "hypothesis-jsonschema",
+        "jsonschema",
+    ):
+        try:
+            installed = version(package)
+        except PackageNotFoundError:
+            installed = "not installed"
+        typer.echo(f"{package}: {installed}")
+    # Report presence only, never environment values or arbitrary variable names.
+    key_status = "set" if os.environ.get("ANTHROPIC_API_KEY") else "not set"
+    typer.echo(f"ANTHROPIC_API_KEY: {key_status}")
 
 
 @app.command()
