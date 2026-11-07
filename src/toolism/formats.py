@@ -8,14 +8,21 @@ from __future__ import annotations
 
 import copy
 from collections import Counter
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Iterable, Mapping, MutableMapping
 from dataclasses import dataclass
 from typing import Any
 
 from toolism.errors import FormatError
 from toolism.models import ToolDef, ToolFormat, ToolSet
 
-__all__ = ["detect_item_format", "parse", "serialize"]
+__all__ = ["MAX_INPUT_DEPTH", "detect_item_format", "parse", "serialize"]
+
+# Deepest nesting (dict/list levels) a single tool item may have. Real tool
+# schemas nest a handful of levels; the recursive paths that follow parsing
+# (deepcopy, the schema walker, canonical JSON) start failing around 400-600
+# levels on a default stack, so 200 leaves a wide margin while still rejecting
+# the hostile ~3,000-level input from #138 as an input error, not a crash.
+MAX_INPUT_DEPTH = 200
 
 
 @dataclass(frozen=True)
@@ -106,9 +113,52 @@ def _to_tool(item: Mapping[str, Any], fmt: ToolFormat | None, index: int) -> Too
     )
 
 
+def _nested_depth(value: Any) -> int:
+    """Deepest dict/list nesting in ``value``, computed iteratively.
+
+    Scalars count as 0, a container counts as 1 plus its deepest child. This
+    must stay iterative: it runs on untrusted input that may already be too
+    deep for any recursive traversal (see #138).
+    """
+    deepest = 0
+    stack = [(value, 0)]
+    while stack:
+        node, depth = stack.pop()
+        children: Iterable[Any]
+        if isinstance(node, Mapping):
+            children = node.values()
+        elif isinstance(node, list):
+            children = node
+        else:
+            continue
+        deepest = max(deepest, depth + 1)
+        stack.extend((child, depth + 1) for child in children)
+    return deepest
+
+
+def _check_input_depth(items: list[Any]) -> None:
+    """Reject tool items nested deeper than :data:`MAX_INPUT_DEPTH`.
+
+    Runs before any deepcopy, so a hostile schema fails here as a
+    :class:`FormatError` instead of surfacing as a ``RecursionError`` from
+    deepcopy, the walker, or canonical JSON further down the pipeline.
+    """
+    for index, item in enumerate(items):
+        if not isinstance(item, Mapping):
+            continue
+        depth = _nested_depth(item)
+        if depth > MAX_INPUT_DEPTH:
+            raise FormatError(
+                f"tool at index {index} is nested too deeply "
+                f"({depth} levels, limit {MAX_INPUT_DEPTH})",
+                hint="flatten the schema or split it into smaller tools",
+            )
+
+
 def parse(document: Any) -> ToolSet:
     """Parse an already-decoded JSON document into a :class:`ToolSet`."""
     path, items = _locate(document)
+    _check_input_depth(items)
     formats: list[ToolFormat | None] = []
     for index, item in enumerate(items):
         if not isinstance(item, Mapping):
