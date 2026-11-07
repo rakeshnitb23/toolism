@@ -20,6 +20,11 @@ All notable changes to this project are documented here. The format follows
   and mask `env` and argument values. JSON output uses the new `measure_sources` report kind.
   (#141)
 
+### Changed
+
+- SL008 now also drops `additionalProperties: {}`, `minLength: 0`, `minItems: 0`,
+  `minProperties: 0` and `uniqueItems: false`, which all equal the JSON Schema default.
+
 ### Fixed
 
 - Deeply nested schemas (about 3,000 levels) no longer crash `measure`, `slim`,
