@@ -3,7 +3,7 @@
 [![PyPI](https://img.shields.io/pypi/v/toolism)](https://pypi.org/project/toolism/)
 [![Python versions](https://img.shields.io/pypi/pyversions/toolism)](https://pypi.org/project/toolism/)
 [![CI](https://github.com/rakeshnitb23/toolism/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/rakeshnitb23/toolism/actions/workflows/ci.yml?query=branch%3Amaster)
-[![License](https://img.shields.io/github/license/rakeshnitb23/toolism)](LICENSE)
+[![License](https://img.shields.io/github/license/rakeshnitb23/toolism)](https://github.com/rakeshnitb23/toolism/blob/master/LICENSE)
 [![Leaderboard](https://img.shields.io/badge/%F0%9F%8F%86-contributor%20leaderboard-orange)](#top-contributors)
 
 **Your agent pays for its tool definitions on every single request. toolism measures that cost
@@ -21,7 +21,7 @@ GitHub, Playwright, Notion, Context7 and AWS docs, plus one generated Pydantic s
 **37.4% in total, with a median of 11.3% per tool set**: 22% on the official git server, 34% on
 a typical Pydantic-typed server, 73% on Notion (which copies the same nine `$defs` into all 24
 tools; 18 of them use none).
-Lean, hand-tuned schemas save almost nothing, and the [benchmark](bench/RESULTS.md) shows those
+Lean, hand-tuned schemas save almost nothing, and the [benchmark](https://github.com/rakeshnitb23/toolism/blob/master/bench/RESULTS.md) shows those
 too.
 
 ## Install
@@ -55,13 +55,13 @@ goes to stderr:
 
 ```console
 $ toolism slim examples/mcp_tools.json -o tools.slim.json
-Slimmed 3 tools: 708 → 457 tokens (−251, −34.6%) — tiktoken:o200k_base (approximate), level safe
+Slimmed 3 tools: 708 → 457 tokens (−251, −35.5%) — tiktoken:o200k_base (approximate), level safe
 Savings by rule
 ┏━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━┓
 ┃ Rule  ┃ Name                   ┃ Tokens ┃ Tools ┃
 ┡━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━┩
 │ SL001 │ redundant-title        │   −111 │     3 │
-│ SL002 │ nullable-anyof         │    −36 │     2 │
+│ SL002 │ nullable-anyof         │    −42 │     3 │
 │ SL003 │ null-default           │    −33 │     3 │
 │ SL004 │ inline-defs            │    −42 │     2 │
 │ SL005 │ description-whitespace │     −6 │     3 │
@@ -76,13 +76,28 @@ $ toolism measure --mcp "npx -y @modelcontextprotocol/server-github"
 ```
 
 `--mcp` runs that command exactly as your shell would, with your environment, so only point it
-at servers you would run anyway. See [SECURITY.md](SECURITY.md).
+at servers you would run anyway. See [SECURITY.md](https://github.com/rakeshnitb23/toolism/blob/master/SECURITY.md).
+
+Or measure every server your MCP client already lists, with one row per server and a total:
+
+```console
+$ toolism measure --mcp-config ~/.cursor/mcp.json
+```
+
+`--mcp-config` reads the `mcpServers` object of a client config such as
+`claude_desktop_config.json`, `.cursor/mcp.json` or a Claude Code `.mcp.json`, and starts each
+stdio server in turn with its `command`, `args` and `env`. `--mcp-timeout` applies to each server.
+The total counts all the servers' tools as one list, the way the model receives them. Remote
+(`url`) and disabled entries are skipped, and a server that fails is listed without stopping the
+rest. It exits 0 when at least one server was measured and 2 when none could be. `env` values
+are passed as written, so `${VAR}` placeholders are not expanded.
 
 **Preview** what slimming changes, as a unified diff per changed tool:
 
 ```bash
 toolism diff examples/mcp_tools.json
 toolism diff examples/mcp_tools.json --level annotations -o tools.diff
+toolism diff --mcp "python my_server.py" --mcp-timeout 30
 toolism diff examples/mcp_tools.json --exit-code  # exits 1 if changes found (CI)
 ```
 
@@ -91,6 +106,8 @@ Unchanged tools are omitted; a tool-order change alone produces no diff. `--leve
 `--enable`, `--disable` and `--option` select the same rewrites as `slim`. The preview runs
 locally without a reporting-tokenizer call. Use `-` for stdin, `--output` to write a file,
 and `--exit-code` to exit 1 when differences are found.
+Use `--mcp COMMAND` instead of a file to preview a live stdio server; `--mcp-timeout SECONDS`
+sets the server timeout (60 seconds by default).
 
 **Gate** it in CI against a committed baseline:
 
@@ -107,8 +124,8 @@ Changed tools
 ┃ Tool            ┃ Baseline ┃ Now ┃ Change ┃
 ┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━╇━━━━━━━━┩
 │ create_contact  │      212 │ 354 │   +142 │
+│ log_activity    │      123 │ 178 │    +55 │
 │ search_contacts │      122 │ 176 │    +54 │
-│ log_activity    │      129 │ 178 │    +49 │
 └─────────────────┴──────────┴─────┴────────┘
 ```
 
@@ -135,14 +152,14 @@ Before, as the MCP Python SDK generates it:
 After `toolism slim`, which accepts exactly the same arguments:
 
 ```json
-"occurred_on": {"anyOf": [{"format": "date", "type": "string"}, {"type": "null"}]},
+"occurred_on": {"type": ["string", "null"], "format": "date"},
 "priority": {"enum": ["low", "normal", "high"], "type": "string", "default": "normal"}
 ```
 
 | Rule | What it removes | Default |
 | --- | --- | --- |
 | SL001 `redundant-title` | titles that repeat the property, `$defs` key or tool name | ✓ |
-| SL002 `nullable-anyof` | `anyOf: [{type: X}, {type: null}]` → `type: [X, "null"]` | ✓ |
+| SL002 `nullable-anyof` | `anyOf: [{type: X}, {type: null}]` → `type: [X, "null"]`, keeping string keywords such as `format` | ✓ |
 | SL003 `null-default` | `default: null` on optional properties (kept for strict tools) | ✓ |
 | SL004 `inline-defs` | unused `$defs`; inlines definitions used exactly once | ✓ |
 | SL005 `description-whitespace` | docstring indentation, trailing spaces, blank-line runs | ✓ |
@@ -150,10 +167,13 @@ After `toolism slim`, which accepts exactly the same arguments:
 | SL007 `stable-order` | nothing; sorts tools so prompt-cache prefixes stay stable | `--enable` |
 | SL008 `noop-keywords` | `required: []`, `additionalProperties: true` and other defaults | ✓ |
 | SL009 `schema-uri` | the root `$schema` URI when the schema means the same in every draft | ✓ |
+| SL010 `single-allof` | single-branch `allOf` wrappers, when merging keeps validation identical | ✓ |
 | SL101 `max-description-length` | truncates long descriptions at a sentence boundary | `--level annotations` |
 | SL102 `drop-examples` | `examples` / `example` | `--level annotations` |
+| SL103 `drop-titles` | every schema `title` | `--level annotations` |
+| SL104 `dedupe-descriptions` | property descriptions that repeat a sentence or line of the tool description | `--level annotations` |
 
-Every rule is documented, with its exact conditions, in [docs/rules.md](docs/rules.md)
+Every rule is documented, with its exact conditions, in [docs/rules.md](https://github.com/rakeshnitb23/toolism/blob/master/docs/rules.md)
 (`toolism rules` lists them too).
 
 ### Safety levels and verification
@@ -162,13 +182,13 @@ Every rule is documented, with its exact conditions, in [docs/rules.md](docs/rul
   accepts exactly the same tool calls as the original. It removes only information the model
   already has.
 - **`--level annotations`**: also drops annotation text that might help the model (examples,
-  long descriptions). Validation is still unchanged; measure the effect on your own evals.
+  titles, long or repeated descriptions). Validation is still unchanged; measure the effect on your own evals.
 - **`--verify`** (`toolism[verify]`) checks every changed schema in both directions. It proves
   equivalence when only annotations changed, and otherwise searches for a counterexample with
   [hypothesis-jsonschema](https://github.com/python-jsonschema/hypothesis-jsonschema). When a
   tool has a counterexample, toolism finds the rules responsible and reverts only their changes;
   if it can't single them out, the whole tool is restored to its original. In CI, every schema the default rules
-  change in the [benchmark corpus](bench/) is checked this way.
+  change in the [benchmark corpus](https://github.com/rakeshnitb23/toolism/tree/master/bench/) is checked this way.
 
 OpenAI `strict: true` tools are respected: anything strict mode requires (`required` listing every
 property, `additionalProperties: false`) is left alone.
@@ -194,8 +214,8 @@ client.messages.create(model=..., tools=tools, messages=...)
 ```
 
 `slim_tools` is cached by input and returns fresh objects each call. See
-[examples/agent_startup.py](examples/agent_startup.py) (Anthropic SDK) and
-[examples/openai_startup.py](examples/openai_startup.py) (OpenAI SDK).
+[examples/agent_startup.py](https://github.com/rakeshnitb23/toolism/blob/master/examples/agent_startup.py) (Anthropic SDK) and
+[examples/openai_startup.py](https://github.com/rakeshnitb23/toolism/blob/master/examples/openai_startup.py) (OpenAI SDK).
 
 ### Stability
 
@@ -206,13 +226,38 @@ from `toolism` is internal and can change at any time.
 
 Before 1.0, a minor release (0.x → 0.y) may change the public API, but only after the old
 behaviour has been deprecated with a warning for at least one minor release, and every such change
-is listed in the [CHANGELOG](CHANGELOG.md). Patch releases never change it. Rule ids are never
+is listed in the [CHANGELOG](https://github.com/rakeshnitb23/toolism/blob/master/CHANGELOG.md). Patch releases never change it. Rule ids are never
 reused, and a rule's safety level never becomes less safe.
 
 To print the before/after token saving for a file of tools (offline, heuristic
-tokenizer), see [examples/measure_savings.py](examples/measure_savings.py).
+tokenizer), see [examples/measure_savings.py](https://github.com/rakeshnitb23/toolism/blob/master/examples/measure_savings.py).
 
 ## GitHub Action
+
+### Inputs
+
+| Input | Description | Default |
+| --- | --- | --- |
+| `source` | Path to a tool definitions JSON file. Use this or `mcp`. | Empty |
+| `mcp` | Command that starts a stdio MCP server. Use this or `source`. | Empty |
+| `mcp-timeout` | Maximum seconds to wait for the MCP server to start. | 60 seconds |
+| `baseline` | Committed baseline file to compare against. | `.toolism/baseline.json` |
+| `max-increase` | Allowed growth over the baseline, as tokens and/or a percentage. | No growth |
+| `max-total` | Fail if total tokens exceed this value. | No limit |
+| `max-tool` | Fail if any single tool exceeds this value. | No limit |
+| `tokenizer` | `heuristic`, `tiktoken:<encoding>` or `anthropic:<model>`. | `tiktoken:o200k_base` |
+| `update-baseline` | Write the baseline instead of checking. | `false` |
+| `allow-tokenizer-change` | Permit a baseline tokenizer mismatch. | `false` |
+| `python-version` | Python used to run toolism. | `3.12` |
+
+### Outputs
+
+| Output | Description |
+| --- | --- |
+| `status` | `pass`, `fail` or `error`. |
+| `total` | Total tool definition tokens now. |
+| `delta` | Change against the baseline in tokens (empty without a baseline). |
+| `summary-file` | Markdown summary file for a sticky pull request comment. |
 
 ```yaml
 # .github/workflows/tool-tokens.yml
@@ -221,9 +266,9 @@ jobs:
   tool-tokens:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: toolism
-        uses: rakeshnitb23/toolism@v0.1.0
+        uses: rakeshnitb23/toolism@v0.2.0
         with:
           source: tools.json                  # or: mcp: "npx -y @your/mcp-server"
           baseline: .toolism/baseline.json
@@ -248,7 +293,7 @@ The same gate runs locally before each commit with [pre-commit](https://pre-comm
 # .pre-commit-config.yaml
 repos:
   - repo: https://github.com/rakeshnitb23/toolism
-    rev: vX.Y.Z  # the first release after 0.1.0 includes the hook
+    rev: v0.2.0
     hooks:
       - id: toolism-check
         args: [tools.json, --baseline, .toolism/baseline.json, --max-increase, "5%"]
@@ -307,7 +352,7 @@ immutable. For example, in a workflow that already installs its locked toolism d
 ```yaml
 env:
   TOOLISM_CACHE_DIR: .cache/toolism-counts
-  TOOLISM_CACHE_COMPAT: v1-anthropic-claude-sonnet-5-toolism-0.1.0
+  TOOLISM_CACHE_COMPAT: v1-anthropic-claude-sonnet-5-toolism-0.2.0
 steps:
   - uses: actions/checkout@v7
   - uses: actions/cache@v6
@@ -323,7 +368,7 @@ base/default-branch cache producer; merge-ref caches are restricted to that PR's
 Fork PRs may read base caches, so never put secrets in cache paths/keys/files or expose provider
 credentials to untrusted jobs. This cache is distinct from provider prompt caching.
 
-For machine-readable reports, see [JSON output](docs/json-output.md): `measure -f json`,
+For machine-readable reports, see [JSON output](https://github.com/rakeshnitb23/toolism/blob/master/docs/json-output.md): `measure -f json`,
 `slim -r json`, and `check -f json` share the versioned `toolism_report: 1` format.
 
 The default tokenizer downloads its vocabulary file (a few MB) once on first use. Offline, behind
@@ -340,15 +385,15 @@ the tokenizer and say whether the count is approximate. Set a default with `TOOL
 | --- | --- | --- | --- |
 | `TOOLISM_TOKENIZER` | `tokenizers/__init__.py` | Default tokenizer when `-t`/`--tokenizer` isn't given (same forms as `-t`) | `tiktoken:o200k_base` |
 | `TOOLISM_CACHE_DIR` | `tokenizers/anthropic_tokenizer.py` | Opt-in directory for bounded persistent Anthropic count snapshots | Persistence disabled (also when empty) |
-| `TOOLISM_DEBUG` | `cli.py`, `loaders/mcp.py` | Any non-empty value shows the full traceback instead of a one-line `error:`, and passes an `--mcp` server's stderr through to yours | One-line errors; the server's stderr is captured and hidden |
+| `TOOLISM_DEBUG` | `cli.py`, `loaders/mcp.py` | Any non-empty value shows the full traceback instead of a one-line `error:`, and passes an `--mcp` or `--mcp-config` server's stderr through to yours | One-line errors; the server's stderr is captured and hidden |
 | `NO_COLOR` | `cli.py` | If set (to any value), terminal output is not coloured | Coloured when writing to a terminal |
 | `TIKTOKEN_CACHE_DIR` | tiktoken | Where the `tiktoken:*` vocabulary is cached, so it can be reused offline | tiktoken's default cache in the system temp directory |
 | `ANTHROPIC_API_KEY` | `tokenizers/anthropic_tokenizer.py` | Needed for `-t anthropic:<model>` | `anthropic:` tokenizers fail with exit code 3 |
 | `GITHUB_STEP_SUMMARY` | `cli.py` | `toolism check` appends its Markdown summary to this file (set by GitHub Actions) | No step summary is written |
 
-A server started with `--mcp` inherits toolism's environment. The GitHub Action also reads its
-inputs as `INPUT_*` variables and uses `GITHUB_OUTPUT` and `RUNNER_TEMP`; these are set by the
-runner and don't need to be set by hand.
+A server started with `--mcp` or `--mcp-config` inherits toolism's environment. The GitHub Action
+also reads its inputs as `INPUT_*` variables and uses `GITHUB_OUTPUT` and `RUNNER_TEMP`; these are
+set by the runner and don't need to be set by hand.
 
 ## How it differs
 
@@ -360,6 +405,20 @@ runner and don't need to be set by hand.
   schemas as they are. toolism makes those schemas smaller before they leave.
 - **Loading fewer tools** (tool search or dynamic selection) cuts the number of tools sent;
   toolism cuts the cost of each tool you do send.
+
+## Estimate tool-definition cost
+
+Pass the provider's current input-token price yourself:
+
+```sh
+toolism measure tools.json --price 3
+```
+
+`--price` is a positive, finite USD price per million input tokens. Table and Markdown
+reports add the cost per 1,000 requests; JSON adds a `cost` object only when requested.
+This uses the counted tool-definition tokens and inherits the tokenizer's accuracy.
+It excludes provider wrapping, caching, other prompt content, and output tokens.
+No provider prices are bundled with toolism.
 
 ## FAQ
 
@@ -382,7 +441,7 @@ outputs slightly, so if tool-call accuracy matters, compare on your evals. That 
 
 **Is tiktoken accurate for Claude or Gemini?** Not exactly, which is why reports say
 "approximate". Use `-t anthropic:<model>` for exact Claude counts. Relative savings are stable
-across tokenizers: within about 2 percentage points in the [benchmark](bench/RESULTS.md).
+across tokenizers: within about 2 percentage points in the [benchmark](https://github.com/rakeshnitb23/toolism/blob/master/bench/RESULTS.md).
 
 ## Top contributors
 
@@ -391,15 +450,15 @@ across tokenizers: within about 2 percentage points in the [benchmark](bench/RES
 </a>
 
 Updated on every merged PR. Merged PRs, written reviews and confirmed bug reports earn points:
-see [Points and levels](CONTRIBUTING.md#points-and-levels) and the
+see [Points and levels](https://github.com/rakeshnitb23/toolism/blob/master/CONTRIBUTING.md#points-and-levels) and the
 [full leaderboard](https://github.com/rakeshnitb23/toolism/issues?q=is%3Aissue+is%3Aopen+%22Contributor+leaderboard%22+in%3Atitle).
 
 ## Contributing
 
 New rules, tokenizers and formats are welcome. A rule is one small module plus a fixture file;
-see [CONTRIBUTING.md](CONTRIBUTING.md) for the 3-step guide and a list of ideas. Everyone taking
-part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+see [CONTRIBUTING.md](https://github.com/rakeshnitb23/toolism/blob/master/CONTRIBUTING.md) for the 3-step guide and a list of ideas. Everyone taking
+part is expected to follow the [Code of Conduct](https://github.com/rakeshnitb23/toolism/blob/master/CODE_OF_CONDUCT.md).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/rakeshnitb23/toolism/blob/master/LICENSE)

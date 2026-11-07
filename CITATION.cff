@@ -8,7 +8,7 @@ authors:
 abstract: >-
   Your agent pays for its tool definitions on every single request. toolism
   measures that cost and cuts it, without changing which tool calls are valid.
-version: 0.1.0
-date-released: "2026-10-23"
+version: 0.2.0
+date-released: "2026-10-31"
 url: https://github.com/rakeshnitb23/toolism
 license: MIT

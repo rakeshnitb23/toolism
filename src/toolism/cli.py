@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import math
 import os
 import shutil
 import sys
@@ -19,7 +20,7 @@ from typing import Annotated, Any, NoReturn, TypeVar
 import typer
 
 from toolism.__about__ import __version__
-from toolism.errors import TokenizerUnavailable, ToolismError
+from toolism.errors import LoaderError, TokenizerUnavailable, ToolismError
 from toolism.models import ToolSet
 
 __all__ = ["app", "main"]
@@ -87,6 +88,19 @@ def _handle_errors(func: F) -> F:
             if os.environ.get("TOOLISM_DEBUG"):
                 raise
             _print_error(exc.message, exc.hint)
+            raise typer.Exit(EXIT_ERROR) from None
+        except RecursionError:
+            # A stack exhaustion reached from the CLI is, for input that
+            # arrives through load/parse, a too-deep schema (#138) — report
+            # it as one input-error line, not as an internal error. Genuine
+            # toolism bugs are still visible with TOOLISM_DEBUG=1, which
+            # reraises before this branch.
+            if os.environ.get("TOOLISM_DEBUG"):
+                raise
+            _print_error(
+                "input is nested too deeply",
+                "flatten the schema or split it into smaller tools",
+            )
             raise typer.Exit(EXIT_ERROR) from None
         except Exception as exc:
             # typer.Exit and friends (typer may vendor click, so match on the module)
@@ -219,24 +233,110 @@ def _root(
 
 @app.command()
 @_handle_errors
+def doctor() -> None:
+    """Print local versions and optional dependencies for a bug report (no network)."""
+    import platform
+    from importlib.metadata import PackageNotFoundError, version
+
+    typer.echo(f"toolism: {__version__}")
+    typer.echo(f"Python: {platform.python_version()}")
+    typer.echo(f"OS: {platform.system()} {platform.release()}")
+    for package in (
+        "typer",
+        "rich",
+        "tiktoken",
+        "mcp",
+        "anthropic",
+        "hypothesis",
+        "hypothesis-jsonschema",
+        "jsonschema",
+    ):
+        try:
+            installed = version(package)
+        except PackageNotFoundError:
+            installed = "not installed"
+        typer.echo(f"{package}: {installed}")
+    # Report presence only, never environment values or arbitrary variable names.
+    key_status = "set" if os.environ.get("ANTHROPIC_API_KEY") else "not set"
+    typer.echo(f"ANTHROPIC_API_KEY: {key_status}")
+
+
+@app.command()
+@_handle_errors
 def measure(
     source: SourceArg = None,
     mcp: McpOpt = None,
+    mcp_config: Annotated[
+        Path | None,
+        typer.Option(
+            "--mcp-config",
+            metavar="FILE",
+            help=(
+                "Start every stdio server in an MCP client config (claude_desktop_config.json, "
+                ".cursor/mcp.json, .mcp.json) and report each one plus the total."
+            ),
+            show_default=False,
+        ),
+    ] = None,
     mcp_timeout: McpTimeoutOpt = 60.0,
     tokenizer: TokenizerOpt = None,
     fmt: Annotated[
         OutputFormat, typer.Option("--format", "-f", help="Report format.")
     ] = OutputFormat.table,
     output: OutputOpt = None,
+    price: Annotated[
+        float | None,
+        typer.Option("--price", metavar="USD_PER_MTOK", help="USD per million input tokens."),
+    ] = None,
 ) -> None:
     """Count the tokens each tool definition costs."""
+    width, color = _style(sys.stdout) if output is None else (DEFAULT_WIDTH, False)
+    if mcp_config is not None:
+        if source is not None or mcp is not None:
+            raise UsageProblem("give only one of SOURCE, --mcp or --mcp-config")
+        if price is not None:
+            raise UsageProblem("--price can't be combined with --mcp-config yet")
+        _measure_mcp_config(mcp_config, mcp_timeout, tokenizer, fmt, output, width, color)
+        return
+
     from toolism.measurement import measure as measure_toolset
     from toolism.report import render_token_report
 
+    if price is not None and (not math.isfinite(price) or price <= 0):
+        raise UsageProblem("--price must be a finite number greater than zero")
     toolset = _load(source, mcp, mcp_timeout)
     report = measure_toolset(toolset, tokenizer)
-    width, color = _style(sys.stdout) if output is None else (DEFAULT_WIDTH, False)
-    _emit(render_token_report(report, fmt.value, width=width, color=color), output)
+    try:
+        rendered = render_token_report(report, fmt.value, width=width, color=color, price=price)
+    except ValueError as exc:
+        raise UsageProblem(str(exc)) from None
+    _emit(rendered, output)
+
+
+def _measure_mcp_config(
+    path: Path,
+    timeout: float,
+    tokenizer: str | None,
+    fmt: OutputFormat,
+    output: Path | None,
+    width: int,
+    color: bool,
+) -> None:
+    from toolism.loaders.mcp_config import load_mcp_config
+    from toolism.measurement import measure_sources
+    from toolism.report import render_sources_report
+    from toolism.tokenizers import get_tokenizer
+
+    counter = get_tokenizer(tokenizer)  # a bad --tokenizer fails before any server starts
+    loaded, not_measured = load_mcp_config(path, timeout=timeout)
+    report = measure_sources(loaded, counter, not_measured=not_measured)
+    _emit(render_sources_report(report, fmt.value, width=width, color=color), output)
+    failed = any(not reason.startswith("skipped:") for _, reason in not_measured)
+    hint = "set TOOLISM_DEBUG=1 to see the servers' stderr" if failed else None
+    if not loaded:  # the report above says why each server was not measured
+        raise LoaderError(f"no server in {path} could be measured", hint=hint)
+    if hint:
+        typer.echo(f"hint: {hint}", err=True)
 
 
 @app.command()
@@ -354,7 +454,9 @@ def slim(
 @app.command()
 @_handle_errors
 def diff(
-    source: SourceArg,
+    source: SourceArg = None,
+    mcp: McpOpt = None,
+    mcp_timeout: McpTimeoutOpt = 60.0,
     level: Annotated[
         Level,
         typer.Option("--level", "-l", help="safe: redundant text; annotations: also lossy text."),
@@ -386,7 +488,7 @@ def diff(
     for assignment in option or []:
         rule_key, key, value = parse_option_assignment(assignment)
         options.setdefault(rule_key, {})[key] = value
-    toolset = _load(source, None, 60.0)
+    toolset = _load(source, mcp, mcp_timeout)
     result = slim_toolset(
         toolset,
         level=level.value,
@@ -525,6 +627,7 @@ def check(
 @app.command()
 @_handle_errors
 def rules(
+    rule: Annotated[str | None, typer.Argument(metavar="RULE", help="Rule ID or name.")] = None,
     fmt: Annotated[
         OutputFormat,
         typer.Option("--format", "-f", help="table, json, or markdown (the docs/rules.md page)."),
@@ -533,9 +636,14 @@ def rules(
 ) -> None:
     """List the slimming rules, their safety level and options."""
     from toolism.report import render_rules
+    from toolism.rules import get_rule
 
+    selected = [get_rule(rule)] if rule is not None else None
     width, color = _style(sys.stdout) if output is None else (DEFAULT_WIDTH, False)
-    _emit(render_rules(fmt.value, width=width, color=color), output)
+    _emit(
+        render_rules(fmt.value, rules=selected, detail=rule is not None, width=width, color=color),
+        output,
+    )
 
 
 def _utf8_streams() -> None:

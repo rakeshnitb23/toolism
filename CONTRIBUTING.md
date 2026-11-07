@@ -190,12 +190,16 @@ Each of these makes a good first issue:
 
 ## Releasing (maintainers)
 
-1. Set `__version__` in `src/toolism/__about__.py`; update `version` and `date-released` in
-   `CITATION.cff`. Move the CHANGELOG's `Unreleased` section under the new version, and update
-   the compare links at the end of `CHANGELOG.md`.
-2. Commit, tag `vX.Y.Z` and push the tag. The `Release` workflow checks that the tag matches
-   `__version__`, builds, publishes to PyPI with trusted publishing, and creates the GitHub
-   release from the CHANGELOG.
+1. Open a pull request (`master` is protected) that sets `__version__` in
+   `src/toolism/__about__.py`; updates `version` and `date-released` in `CITATION.cff`; moves the
+   CHANGELOG's `Unreleased` section under the new version with a short `Highlights` list, and
+   updates the compare links at the end of `CHANGELOG.md`; updates the version in the README's
+   Action, pre-commit and cache examples; and regenerates the benchmark with
+   `uv run python bench/run.py`.
+2. After it merges, tag that commit `vX.Y.Z` and push the tag. The `Release` workflow checks that
+   the tag matches `__version__`, builds, runs the wheel once, publishes to PyPI with trusted
+   publishing, and creates the GitHub release from the CHANGELOG plus GitHub's generated list of
+   pull requests and new contributors. A PyPI version can't be replaced, so check before tagging.
 3. The GitHub Action is versioned by the same tag (`uses: rakeshnitb23/toolism@vX.Y.Z`).
 
 **One-time setup.** On pypi.org, add a trusted publisher: owner `rakeshnitb23`, repository

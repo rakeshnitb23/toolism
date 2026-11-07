@@ -1,8 +1,8 @@
 {
   "toolism_report": 1,
   "kind": "benchmark",
-  "toolism_version": "0.1.0",
-  "date": "2026-10-23",
+  "toolism_version": "0.2.0",
+  "date": "2026-10-31",
   "command": "uv run python bench/run.py",
   "tokenizers": [
     "tiktoken:o200k_base",
@@ -110,28 +110,29 @@
         "annotations": {
           "tiktoken:o200k_base": {
             "before": 3220,
-            "after": 3096,
-            "saved": 124,
-            "saved_pct": 3.85
+            "after": 3036,
+            "saved": 184,
+            "saved_pct": 5.71
           },
           "rules": {
             "SL001": 100,
             "SL002": 6,
             "SL003": 12,
-            "SL005": 6
+            "SL005": 6,
+            "SL104": 60
           },
           "attribution_tokenizer": "tiktoken:o200k_base",
           "tiktoken:cl100k_base": {
             "before": 3191,
-            "after": 3068,
-            "saved": 123,
-            "saved_pct": 3.85
+            "after": 3008,
+            "saved": 183,
+            "saved_pct": 5.73
           },
           "heuristic": {
             "before": 3423,
-            "after": 3292,
-            "saved": 131,
-            "saved_pct": 3.83
+            "after": 3222,
+            "saved": 201,
+            "saved_pct": 5.87
           }
         }
       },
@@ -947,9 +948,9 @@
     },
     "annotations": {
       "before": 39638,
-      "after": 24690,
-      "saved": 14948,
-      "saved_pct": 37.71
+      "after": 24630,
+      "saved": 15008,
+      "saved_pct": 37.86
     }
   },
   "median_saved_pct": {

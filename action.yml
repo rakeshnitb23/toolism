@@ -14,6 +14,10 @@ inputs:
     description: Command that starts a stdio MCP server, e.g. `npx -y @scope/server`. Use this or `source`.
     required: false
     default: ""
+  mcp-timeout:
+    description: Maximum seconds to wait for the MCP server to start. Empty keeps the 60-second default.
+    required: false
+    default: ""
   baseline:
     description: Committed baseline file. Create it with `toolism check SOURCE -b FILE --update-baseline`.
     required: false
@@ -90,6 +94,7 @@ runs:
       env:
         INPUT_SOURCE: ${{ inputs.source }}
         INPUT_MCP: ${{ inputs.mcp }}
+        INPUT_MCP_TIMEOUT: ${{ inputs.mcp-timeout }}
         INPUT_BASELINE: ${{ inputs.baseline }}
         INPUT_MAX_INCREASE: ${{ inputs.max-increase }}
         INPUT_MAX_TOTAL: ${{ inputs.max-total }}

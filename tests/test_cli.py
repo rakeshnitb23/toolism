@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import subprocess
 import sys
@@ -7,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from rich.text import Text
 from typer.testing import CliRunner
 
 from toolism import cli
@@ -73,7 +75,7 @@ def test_version(runner: CliRunner) -> None:
 def test_help_lists_commands(runner: CliRunner) -> None:
     result = invoke(runner, "--help")
     assert result.exit_code == 0
-    for command in ("measure", "slim", "diff", "check", "rules"):
+    for command in ("measure", "slim", "diff", "check", "rules", "doctor"):
         assert command in result.stdout
 
 
@@ -125,6 +127,20 @@ def test_measure_stdin_and_output_file(runner: CliRunner, tmp_path: Path) -> Non
     assert out.read_text(encoding="utf-8").startswith("### toolism — tool definition tokens")
 
 
+def test_measure_accepts_a_file_with_a_utf8_bom(runner: CliRunner, tmp_path: Path) -> None:
+    path = tmp_path / "bom.json"
+    path.write_bytes(b"\xef\xbb\xbf" + json.dumps(BLOATED).encode("utf-8"))
+    result = invoke(runner, "measure", path)
+    assert result.exit_code == 0, result.output
+    assert "create_issue" in result.stdout
+
+
+def test_measure_accepts_stdin_with_a_utf8_bom(runner: CliRunner) -> None:
+    result = invoke(runner, "measure", "-", input="\ufeff" + json.dumps(BLOATED))
+    assert result.exit_code == 0, result.output
+    assert "create_issue" in result.stdout
+
+
 @pytest.mark.parametrize(
     ("args", "message"),
     [
@@ -147,6 +163,40 @@ def test_invalid_json_reports_position(runner: CliRunner) -> None:
     result = invoke(runner, "measure", "-", input='{"tools": [}')
     assert result.exit_code == 2
     assert "invalid JSON at line 1, column 12" in result.stderr
+
+
+def _deeply_nested_tool_text(levels: int) -> str:
+    # Build the JSON text iteratively: json.dumps() itself recurses and
+    # would blow the stack on this input before the CLI ever runs.
+    text = '{"type": "string"}'
+    for _ in range(levels):
+        text = '{"type": "object", "properties": {"a": ' + text + "}}"
+    return '[{"name": "t", "inputSchema": ' + text + "}]"
+
+
+@pytest.mark.parametrize("command", ["measure", "slim", "diff"])
+def test_deeply_nested_schema_is_an_input_error_not_internal(
+    runner: CliRunner, tmp_path: Path, command: str
+) -> None:
+    # #138: one `error:` line, exit 2, no "internal error" blame line.
+    path = tmp_path / "deep.json"
+    path.write_text(_deeply_nested_tool_text(3000), encoding="utf-8")
+    result = invoke(runner, command, path)
+    assert result.exit_code == 2
+    assert result.stderr.startswith("error: ")
+    assert "nested too deeply" in result.stderr
+    assert "internal error" not in result.output
+    assert "Traceback" not in result.output
+
+
+def test_deeply_nested_schema_check_is_an_input_error(runner: CliRunner, tmp_path: Path) -> None:
+    path = tmp_path / "deep.json"
+    path.write_text(_deeply_nested_tool_text(3000), encoding="utf-8")
+    result = invoke(runner, "check", path, "--max-total", "100000")
+    assert result.exit_code == 2
+    assert result.stderr.startswith("error: ")
+    assert "nested too deeply" in result.stderr
+    assert "internal error" not in result.output
 
 
 def test_missing_input_file_shows_hint(runner: CliRunner) -> None:
@@ -519,6 +569,130 @@ def test_main_switches_non_utf8_streams_to_utf8(monkeypatch: pytest.MonkeyPatch)
 # ---------------------------------------------------------------------- diff
 
 
+@pytest.mark.parametrize("forced_color", [False, True])
+def test_diff_mcp_options_in_help(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, forced_color: bool
+) -> None:
+    from typer import rich_utils
+
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr(rich_utils, "FORCE_TERMINAL", forced_color)
+    monkeypatch.setattr(rich_utils, "COLOR_SYSTEM", "standard" if forced_color else None)
+    result = invoke(runner, "diff", "--help", color=True)
+    assert result.exit_code == 0
+    assert ("\x1b[" in result.stdout) == forced_color
+    # Rich can style the leading dashes separately from the rest of an option.
+    help_text = Text.from_ansi(result.stdout).plain
+    assert "--mcp" in help_text
+    assert "--mcp-timeout" in help_text
+    assert "[SOURCE]" in help_text
+
+
+@pytest.mark.parametrize("source", [MCP_TOOLS, "-"])
+def test_diff_mcp_rejects_conflicting_input_before_loading(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, source: Path | str
+) -> None:
+    def unexpected_load(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("conflicting inputs must be rejected before starting a server")
+
+    monkeypatch.setattr("toolism.loaders.mcp.load_mcp_stdio", unexpected_load)
+    result = invoke(runner, "diff", source, "--mcp", "must-not-start")
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert result.stderr == "error: give either SOURCE or --mcp, not both\n"
+
+
+@pytest.mark.parametrize(("args", "timeout"), [((), 60.0), (("--mcp-timeout", "2.5"), 2.5)])
+def test_diff_mcp_forwards_timeout_and_preserves_preview(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, args: tuple[str, ...], timeout: float
+) -> None:
+    from toolism.formats import parse
+
+    calls: list[tuple[str, float]] = []
+
+    def load(command: str, *, timeout: float) -> Any:
+        calls.append((command, timeout))
+        return parse(BLOATED)
+
+    monkeypatch.setattr("toolism.loaders.mcp.load_mcp_stdio", load)
+    expected = invoke(runner, "diff", "-", input=json.dumps(BLOATED))
+    result = invoke(runner, "diff", "--mcp", "test-server", *args)
+    assert result.exit_code == expected.exit_code == 0
+    assert result.stdout == expected.stdout
+    assert "@@" in result.stdout
+    assert result.stderr == expected.stderr
+    assert calls == [("test-server", timeout)]
+
+
+def test_diff_mcp_without_extra(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    from toolism.errors import MissingExtraError
+
+    def missing() -> Any:
+        raise MissingExtraError("Loading tools from an MCP server", "mcp")
+
+    monkeypatch.setattr("toolism.loaders.mcp._import_mcp", missing)
+    result = invoke(runner, "diff", "--mcp", "must-not-start")
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert "hint: pip install 'toolism[mcp]'" in result.stderr
+    assert "Traceback" not in result.output
+
+
+def test_diff_mcp_loader_failure(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    from toolism.errors import LoaderError
+
+    def fail(command: str, *, timeout: float) -> Any:
+        raise LoaderError("MCP fixture failed", hint="check the server command")
+
+    monkeypatch.setattr("toolism.loaders.mcp.load_mcp_stdio", fail)
+    result = invoke(runner, "diff", "--mcp", "test-server")
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert result.stderr == "error: MCP fixture failed\nhint: check the server command\n"
+
+
+def test_diff_mcp_timeout_requires_a_number(runner: CliRunner) -> None:
+    result = invoke(runner, "diff", "--mcp", "must-not-start", "--mcp-timeout", "soon")
+    assert result.exit_code == 2
+    assert "soon" in result.stderr
+    assert "valid float" in result.stderr
+
+
+@pytest.mark.parametrize("document", [[], {"tools": [BLOATED["tools"][0]] * 2}])
+def test_diff_mcp_preserves_empty_and_warning_output(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, document: Any
+) -> None:
+    from toolism.formats import parse
+
+    monkeypatch.setattr("toolism.loaders.mcp.load_mcp_stdio", lambda *a, **k: parse(document))
+    expected = invoke(runner, "diff", "-", input=json.dumps(document))
+    result = invoke(runner, "diff", "--mcp", "test-server")
+    assert result.exit_code == expected.exit_code == 0
+    assert result.stdout == expected.stdout
+    assert result.stderr == expected.stderr
+
+
+@pytest.mark.mcp
+def test_diff_live_mcp_matches_file_and_writes_output(runner: CliRunner, tmp_path: Path) -> None:
+    pytest.importorskip("mcp")
+    from toolism.io import dumps
+    from toolism.loaders.mcp import load_mcp_stdio
+
+    command = f'"{sys.executable}" "{DEMO}"'
+    source = tmp_path / "tools.json"
+    source.write_text(dumps(load_mcp_stdio(command)), encoding="utf-8")
+    args = ("--level", "annotations", "--disable", "SL103")
+    expected = invoke(runner, "diff", source, *args)
+    target = tmp_path / "previews" / "tools.diff"
+    result = invoke(runner, "diff", "--mcp", command, *args, "-o", target)
+    assert result.exit_code == expected.exit_code == 0, result.output
+    assert result.stdout == ""
+    assert result.stderr == expected.stderr
+    assert target.read_text(encoding="utf-8") == expected.stdout
+    assert "@@" in expected.stdout
+    assert "create_contact" in expected.stdout
+
+
 def test_diff_changed_tool_and_unchanged_file(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -778,8 +952,8 @@ def test_diff_keeps_lf_hunks_with_unicode_line_separators(
 def test_diff_requires_source(runner: CliRunner) -> None:
     result = invoke(runner, "diff")
     assert result.exit_code == 2
-    assert "missing argument" in result.output.lower()
-    assert "SOURCE" in result.output
+    assert result.stdout == ""
+    assert result.stderr.startswith("error: missing SOURCE:")
 
 
 def test_diff_reports_output_write_errors(runner: CliRunner, bloated: Path, tmp_path: Path) -> None:
@@ -850,3 +1024,287 @@ def test_architecture_doc_lists_every_cli_option() -> None:
             for opt in param.opts:
                 if opt.startswith("--") and opt != "--help":
                     assert opt in doc, f"toolism {name} {opt} is missing from ARCHITECTURE.md"
+
+
+# ---------------------------------------------------------------- mcp config
+
+
+def _fake_servers(monkeypatch: pytest.MonkeyPatch, failing: tuple[str, ...] = ()) -> list[str]:
+    from toolism.errors import LoaderError
+    from toolism.formats import parse
+
+    started: list[str] = []
+
+    def fake_load(command: list[str], **_: Any) -> Any:
+        started.append(command[0])
+        if command[0] in failing:
+            raise LoaderError(f"MCP server {command[0]!r} failed: command not found")  # like mcp.py
+        return parse(
+            {
+                "tools": [
+                    {"name": f"{command[0]}_{i}", "inputSchema": {"type": "object"}} for i in (1, 2)
+                ]
+            }
+        )
+
+    monkeypatch.setattr("toolism.loaders.mcp.load_mcp_stdio", fake_load)
+    return started
+
+
+def _config(tmp_path: Path, servers: dict[str, Any]) -> Path:
+    path = tmp_path / "mcp.json"
+    path.write_text(json.dumps({"mcpServers": servers}), encoding="utf-8")
+    return path
+
+
+def test_measure_mcp_config_reports_each_server_and_the_total(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started = _fake_servers(monkeypatch, failing=("broken",))
+    config = _config(
+        tmp_path,
+        {
+            "github": {"command": "github", "env": {"GITHUB_TOKEN": "secret-value"}},
+            "broken": {"command": "broken"},
+            "remote": {"url": "https://example.com/mcp"},
+            "files": {"command": "files"},
+        },
+    )
+    result = invoke(runner, "measure", "--mcp-config", config, "-f", "json")
+    assert result.exit_code == 0, result.output
+    assert started == ["github", "broken", "files"]
+    data = json.loads(result.stdout)
+    assert [s["name"] for s in data["sources"]] == ["github", "files"]
+    assert data["tool_count"] == 4
+    assert data["kind"] == "measure_sources"
+    assert data["not_measured"][0] == {"name": "broken", "reason": "failed: command not found"}
+    assert [n["name"] for n in data["not_measured"]] == ["broken", "remote"]
+    assert "secret-value" not in result.output
+    assert result.stderr == "hint: set TOOLISM_DEBUG=1 to see the servers' stderr\n"
+
+    table = invoke(runner, "measure", "--mcp-config", config)
+    assert table.exit_code == 0, table.output
+    assert "Total" in table.stdout
+    assert "4 tools from 2 of 4 servers" in table.stdout
+
+
+def test_measure_mcp_config_exits_2_when_no_server_is_measured(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_servers(monkeypatch, failing=("broken",))
+    config = _config(tmp_path, {"broken": {"command": "broken"}, "off": {"disabled": True}})
+    result = invoke(runner, "measure", "--mcp-config", config)
+    assert result.exit_code == 2
+    assert "Not measured: broken" in result.stdout
+    assert result.stderr == (
+        f"error: no server in {config} could be measured\n"
+        "hint: set TOOLISM_DEBUG=1 to see the servers' stderr\n"
+    )
+
+
+@pytest.mark.parametrize("extra", [("tools.json",), ("--mcp", "server")])
+def test_measure_mcp_config_rejects_other_inputs_before_starting_anything(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: tuple[str, ...]
+) -> None:
+    started = _fake_servers(monkeypatch)
+    config = _config(tmp_path, {"a": {"command": "a"}})
+    result = invoke(runner, "measure", "--mcp-config", config, *extra)
+    assert result.exit_code == 2
+    assert result.stderr == "error: give only one of SOURCE, --mcp or --mcp-config\n"
+    assert started == []
+
+
+def test_measure_mcp_config_bad_tokenizer_fails_before_starting_servers(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started = _fake_servers(monkeypatch)
+    config = _config(tmp_path, {"a": {"command": "a"}})
+    result = invoke(runner, "measure", "--mcp-config", config, "-t", "bogus")
+    assert result.exit_code == 2
+    assert result.stderr.startswith("error: unknown tokenizer 'bogus'")
+    assert started == []
+
+
+def test_measure_mcp_config_not_a_config(runner: CliRunner, tmp_path: Path) -> None:
+    result = invoke(runner, "measure", "--mcp-config", MCP_TOOLS)
+    assert result.exit_code == 2
+    assert result.stderr.startswith("error: no 'mcpServers' object found in")
+    assert "hint: --mcp-config reads an MCP client config" in result.stderr
+
+
+@pytest.mark.mcp
+def test_measure_live_mcp_config(runner: CliRunner, tmp_path: Path) -> None:
+    pytest.importorskip("mcp")
+    config = _config(tmp_path, {"demo": {"command": sys.executable, "args": [str(DEMO)]}})
+    result = invoke(runner, "measure", "--mcp-config", config, "-f", "json")
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert data["sources"][0]["name"] == "demo"
+    assert data["tool_count"] == 2
+
+
+@pytest.mark.parametrize("fmt", ["table", "markdown", "json"])
+def test_measure_with_price(runner: CliRunner, fmt: str) -> None:
+    result = invoke(runner, "measure", MCP_TOOLS, "--price", "3", "-f", fmt)
+    assert result.exit_code == 0, result.output
+    if fmt == "json":
+        data = json.loads(result.stdout)
+        assert data["cost"]["usd_per_million_input_tokens"] == 3
+        assert data["cost"]["usd_per_1000_requests"] == pytest.approx(
+            data["total_tokens"] * 3 / 1000
+        )
+    else:
+        assert "per million input tokens" in result.stdout
+        assert "per 1,000 requests" in result.stdout
+
+
+@pytest.mark.parametrize("price", ["0", "-1", "nan", "inf", "-inf"])
+def test_measure_rejects_invalid_price_before_loading(runner: CliRunner, price: str) -> None:
+    result = invoke(runner, "measure", "missing.json", "--price", price)
+    assert result.exit_code == 2
+    assert "--price must be a finite number greater than zero" in result.stderr
+    assert "cannot read" not in result.stderr
+
+
+def test_measure_price_overflow_is_a_usage_error(runner: CliRunner) -> None:
+    tool = {"tools": [{"name": "long", "description": "x" * 30000, "inputSchema": {}}]}
+    result = invoke(runner, "measure", "-", "--price", "1e308", input=json.dumps(tool))
+    assert result.exit_code == 2
+    assert "--price is too large for this token count" in result.stderr
+    assert "internal error" not in result.stderr
+
+
+@pytest.mark.parametrize("selector", ["SL004", "inline-defs"])
+@pytest.mark.parametrize("fmt", ["table", "json", "markdown"])
+@pytest.mark.parametrize("to_file", [False, True])
+def test_rules_single_detail(
+    runner: CliRunner, tmp_path: Path, selector: str, fmt: str, to_file: bool
+) -> None:
+    from toolism.rules import get_rule
+
+    args = ["rules", selector, "-f", fmt]
+    output = tmp_path / "rule.txt"
+    if to_file:
+        args += ["-o", str(output)]
+    result = invoke(runner, *args)
+    assert result.exit_code == 0, result.output
+    assert result.stderr == ""
+    text = output.read_text(encoding="utf-8") if to_file else result.stdout
+    if to_file:
+        assert result.stdout == ""
+    if fmt == "json":
+        data = json.loads(text)
+        assert data["kind"] == "rules"
+        assert [rule["id"] for rule in data["rules"]] == ["SL004"]
+    else:
+        description = inspect.cleandoc(get_rule("SL004").__doc__ or "").replace("``", "`")
+        assert " ".join(description.split()) in " ".join(text.split())
+        assert "SL004" in text
+        assert "inline-defs" in text
+        assert "SL001" not in text
+        assert "safe" in text
+        assert "default" in text
+        assert "Validation-equivalent" in text
+
+
+def test_rules_single_detail_options(runner: CliRunner) -> None:
+    result = invoke(runner, "rules", "SL101")
+    assert result.exit_code == 0, result.output
+    assert "max_chars" in result.stdout
+    assert "300" in result.stdout
+    assert "int" in result.stdout
+    assert "--level annotations" in result.stdout
+
+
+@pytest.mark.parametrize("selector", ["SL999", "not-a-rule"])
+def test_rules_unknown_uses_existing_error(runner: CliRunner, selector: str) -> None:
+    result = invoke(runner, "rules", selector)
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert result.stderr == (
+        f"error: unknown rule {selector!r}\nhint: run 'toolism rules' to list rules\n"
+    )
+
+
+@pytest.mark.parametrize("key_value", [None, "", "private-api-key-sentinel"])
+def test_doctor_reports_versions_without_secrets_or_network(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, key_value: str | None
+) -> None:
+    import importlib.metadata
+    import platform
+    import socket
+
+    installed = {"typer": "1.0", "rich": "2.0", "tiktoken": "3.0", "hypothesis": "4.0"}
+
+    def version(name: str) -> str:
+        if name in installed:
+            return installed[name]
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    def no_network(*args: Any, **kwargs: Any) -> Any:
+        pytest.fail("doctor must not make network requests")
+
+    monkeypatch.setattr(importlib.metadata, "version", version)
+    monkeypatch.setattr(platform, "python_version", lambda: "3.13.0")
+    monkeypatch.setattr(platform, "system", lambda: "TestOS")
+    monkeypatch.setattr(platform, "release", lambda: "1.0")
+    monkeypatch.setattr(socket, "create_connection", no_network)
+    monkeypatch.setattr(socket.socket, "connect", no_network)
+    for module in (
+        "anthropic",
+        "mcp",
+        "hypothesis",
+        "hypothesis_jsonschema",
+        "jsonschema",
+        "tiktoken",
+    ):
+        monkeypatch.setitem(sys.modules, module, None)
+    if key_value is None:
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    else:
+        monkeypatch.setenv("ANTHROPIC_API_KEY", key_value)
+    monkeypatch.setenv("UNRELATED_SECRET", "unrelated-secret-sentinel")
+
+    result = invoke(runner, "doctor")
+
+    assert result.exit_code == 0, result.output
+    assert f"toolism: {__version__}" in result.stdout
+    assert "Python: 3.13.0" in result.stdout
+    assert "OS: TestOS 1.0" in result.stdout
+    for name, value in installed.items():
+        assert f"{name}: {value}" in result.stdout
+    for name in ("mcp", "anthropic", "hypothesis-jsonschema", "jsonschema"):
+        assert f"{name}: not installed" in result.stdout
+    assert f"ANTHROPIC_API_KEY: {'set' if key_value else 'not set'}" in result.stdout
+    assert "private-api-key-sentinel" not in result.output
+    assert "unrelated-secret-sentinel" not in result.output
+    assert result.stderr == ""
+
+
+def test_doctor_reports_all_installed_extras(
+    runner: CliRunner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import importlib.metadata
+
+    monkeypatch.setattr(importlib.metadata, "version", lambda name: "9.8.7")
+    result = invoke(runner, "doctor")
+    assert result.exit_code == 0, result.output
+    for name in (
+        "typer",
+        "rich",
+        "tiktoken",
+        "mcp",
+        "anthropic",
+        "hypothesis",
+        "hypothesis-jsonschema",
+        "jsonschema",
+    ):
+        assert f"{name}: 9.8.7" in result.stdout
+
+
+def test_measure_price_with_mcp_config_is_a_usage_error(runner: CliRunner, tmp_path: Path) -> None:
+    config = tmp_path / "mcp.json"
+    config.write_text('{"mcpServers": {"x": {"command": "never-started"}}}', encoding="utf-8")
+    result = invoke(runner, "measure", "--mcp-config", config, "--price", "3")
+    assert result.exit_code == 2
+    assert "--price can't be combined with --mcp-config" in result.stderr

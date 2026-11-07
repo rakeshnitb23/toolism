@@ -67,7 +67,17 @@ path = "src/toolism/__about__.py"
 packages = ["src/toolism"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/toolism", "tests", "README.md", "LICENSE", "CHANGELOG.md", "action.yml"]
+include = [
+  "src/toolism",
+  "tests",
+  "examples",
+  "bench",
+  "docs",
+  "README.md",
+  "LICENSE",
+  "CHANGELOG.md",
+  "action.yml",
+]
 
 # ---------------------------------------------------------------- ruff
 [tool.ruff]
