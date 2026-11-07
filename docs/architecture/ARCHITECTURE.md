@@ -191,7 +191,7 @@ toolism slim    SOURCE [--output FILE] [--level safe|annotations] [--enable ID].
 toolism check   SOURCE --baseline FILE [--max-increase 10%|500] [--max-total N] [--max-tool N]
                         [--update-baseline] [--allow-tokenizer-change] [--tokenizer T]
                         [--format table|json|markdown] [--output FILE] [--summary-md FILE]
-toolism rules   [--format table|json|markdown] [--output FILE]
+toolism rules   [RULE] [--format table|json|markdown] [--output FILE]
 
 toolism doctor
 
@@ -209,6 +209,8 @@ making network requests or printing credentials. Missing extras are diagnostic i
 not an error.
 
 - `SOURCE` is a JSON file, `-` for stdin, or `--mcp "<command>"` for a live stdio server.
+- `rules RULE` accepts a rule ID or name and shows its full description, safety and options.
+  Omitting `RULE` keeps the summary listing; JSON and Markdown retain their existing format.
 - **Exit codes:**
   - `0` = OK
   - `1` = budget exceeded (check), a verification rollback happened (slim `--fail-on-rollback`), or differences found (diff `--exit-code`)
