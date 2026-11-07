@@ -283,6 +283,14 @@ def test_gemini_json_schema_validates_with_google_genai() -> None:
     assert function.parameters is None
 
 
+def test_gemini_requires_python_311_for_full_json_schema(monkeypatch: Any) -> None:
+    import toolism.tokenizers.gemini_tokenizer as gemini_tokenizer
+
+    monkeypatch.setattr(gemini_tokenizer, "_python_version", lambda: (3, 10))
+    with pytest.raises(TokenizerUnavailable, match=r"Python 3\.11 or newer"):
+        gemini_tokenizer.GeminiTokenizer("m")
+
+
 def test_gemini_setup_errors(monkeypatch: Any) -> None:
     from toolism.tokenizers import GeminiTokenizer
 

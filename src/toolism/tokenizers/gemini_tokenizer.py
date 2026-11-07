@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Sequence
 from typing import Any
 
@@ -10,6 +11,10 @@ from toolism.errors import TokenizerUnavailable
 from toolism.models import ToolDef
 
 __all__ = ["GeminiTokenizer"]
+
+
+def _python_version() -> tuple[int, int]:
+    return int(sys.version_info.major), int(sys.version_info.minor)
 
 
 def to_gemini_tool(tool: ToolDef) -> dict[str, Any]:
@@ -37,6 +42,11 @@ class GeminiTokenizer:
 
     @staticmethod
     def _make_client() -> Any:
+        if _python_version() < (3, 11):
+            raise TokenizerUnavailable(
+                "the gemini tokenizer needs Python 3.11 or newer for full JSON Schema support",
+                hint="use Python 3.11+ and install 'toolism[gemini]'",
+            )
         try:
             from google import genai
         except ImportError as exc:
