@@ -33,6 +33,14 @@ pip install "toolism[mcp]"          # + read tools straight from an MCP server
 pip install "toolism[all]"          # everything, incl. Anthropic's exact token counter
 ```
 
+Or run it without adding it to a project:
+
+```bash
+uvx toolism measure tools.json                    # one-off run with uv
+uvx --from "toolism[mcp]" toolism measure --mcp "uvx mcp-server-time"   # with an extra
+pipx install "toolism[mcp]"                       # isolated, always-on-PATH install
+```
+
 ## 30-second tour
 
 **Measure** what your tools cost (OpenAI, Anthropic and MCP JSON are detected automatically):
