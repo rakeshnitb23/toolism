@@ -79,10 +79,15 @@ def _persistent_cache(model: str, client: Any, injected: bool) -> SnapshotCache 
         return None
 
 
+def anthropic_tool_name(name: str) -> str:
+    """The name as Anthropic accepts it: other characters become ``_``, cut at 128 characters."""
+    return _INVALID_NAME_CHARS.sub("_", name)[:128] or "tool"
+
+
 def to_anthropic_tool(tool: ToolDef) -> dict[str, Any]:
     """Convert any tool to the Anthropic wire shape used for counting."""
     schema = tool.input_schema if isinstance(tool.input_schema, dict) else {"type": "object"}
-    item: dict[str, Any] = {"name": _INVALID_NAME_CHARS.sub("_", tool.name)[:128] or "tool"}
+    item: dict[str, Any] = {"name": anthropic_tool_name(tool.name)}
     if tool.description is not None:
         item["description"] = tool.description
     item["input_schema"] = schema

@@ -6,6 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `toolism rules RULE`: show a single rule by ID or name, with full details and options.
+- `toolism doctor` reports local versions and optional dependencies for bug reports,
+  without network requests or revealing API keys.
+- `toolism measure --price USD_PER_MTOK` estimates tool-definition cost per 1,000
+  requests in table, Markdown and JSON reports, using a user-supplied price.
+- `toolism measure --mcp-config FILE` measures every stdio server in an MCP client config
+  (`claude_desktop_config.json`, `.cursor/mcp.json`, `.mcp.json`) and reports one row per server
+  plus a total over all their tools. A failing server is reported without stopping the others;
+  remote and disabled entries are skipped. Failure reasons leave out the server's command line
+  and mask `env` and argument values. JSON output uses the new `measure_sources` report kind.
+  (#141)
+
+### Changed
+
+- SL008 now also drops `additionalProperties: {}`, `minLength: 0`, `minItems: 0`,
+  `minProperties: 0` and `uniqueItems: false`, which all equal the JSON Schema default.
+
+### Fixed
+
+- Deeply nested schemas (about 3,000 levels) no longer crash `measure`, `slim`,
+  `diff`, and `check` with an internal `RecursionError`. Tool items nested
+  deeper than 200 levels are now rejected at parse time as a `FormatError`,
+  so the CLI prints a single input-error line and exits 2, and the Python
+  API raises `FormatError`.
+
 ## [0.2.0] - 2026-10-31
 
 toolism's second release lets you see every change before you make it, verifies more precisely,
