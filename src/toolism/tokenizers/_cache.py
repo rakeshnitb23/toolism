@@ -12,8 +12,8 @@ import os
 import re
 import stat
 import tempfile
-from collections.abc import Callable
-from contextlib import suppress
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from time import time
 from typing import Any
@@ -24,6 +24,7 @@ TTL_SECONDS = 24 * 60 * 60
 _MAX_COUNT = 2**63 - 1
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 _FILENAME = "toolism-token-counts-v1.json"
+_CHECKPOINT_UPDATES = 32
 
 
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -64,6 +65,9 @@ class SnapshotCache:
         self._created = int(self._clock())
         self._epoch = 0
         self._entries: dict[str, int] = {}
+        self._batch_depth = 0
+        self._pending: bytes | None = None
+        self._until_checkpoint = 1
         self._read()
 
     @property
@@ -73,7 +77,27 @@ class SnapshotCache:
             self._entries.clear()
             self._created = now
             self._epoch += 1
+            self._pending = None
+            self._until_checkpoint = 1
         return self._created, self._epoch
+
+    @contextmanager
+    def batch(self) -> Iterator[None]:
+        """Checkpoint a run and publish its remaining counts even when the run fails."""
+        if self._batch_depth == 0:
+            self._until_checkpoint = 1
+        self._batch_depth += 1
+        try:
+            yield
+        finally:
+            self._batch_depth -= 1
+            if self._batch_depth == 0:
+                self._flush()
+
+    def _flush(self) -> None:
+        _ = self.generation  # Never publish pending counts from an expired generation.
+        if self._pending is not None and self._write(self._pending):
+            self._pending = None
 
     def key(self, kind: str, payload: Any) -> str | None:
         try:
@@ -110,7 +134,15 @@ class SnapshotCache:
             del self._entries[next(iter(self._entries))]
             encoded = self._encode()
         if len(encoded) <= MAX_BYTES:
-            self._write(encoded)
+            self._pending = encoded
+            if self._batch_depth == 0:
+                self._flush()
+            else:
+                self._until_checkpoint -= 1
+                if self._until_checkpoint <= 0:
+                    # Failed writes remain dirty, but do not cause a retry on every put.
+                    self._until_checkpoint = _CHECKPOINT_UPDATES
+                    self._flush()
 
     def _encode(self) -> bytes:
         return json.dumps(
@@ -172,14 +204,14 @@ class SnapshotCache:
         except (OSError, ValueError, UnicodeError, RecursionError):
             return
 
-    def _write(self, encoded: bytes) -> None:
+    def _write(self, encoded: bytes) -> bool:
         descriptor = -1
         temporary: Path | None = None
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             try:
                 if not self._regular():
-                    return
+                    return False
             except FileNotFoundError:
                 pass
             descriptor, name = tempfile.mkstemp(
@@ -192,8 +224,9 @@ class SnapshotCache:
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, self.path)
+            return True
         except (OSError, ValueError):
-            pass
+            return False
         finally:
             if descriptor != -1:
                 with suppress(OSError):
