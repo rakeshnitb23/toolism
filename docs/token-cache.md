@@ -28,6 +28,13 @@ repopulate cached entries.
 
 Writes use a temporary sibling and atomic replacement. Concurrent writers can lose each other's
 new cache hits and repeat requests; they do not merge updates or coordinate cold requests.
+`measure` and `slim` batch cache writes: the first new count is saved immediately, then a
+checkpoint is saved every 32 further updates, with remaining counts flushed before returning
+or propagating a provider error. Standalone tokenizer calls still save immediately. Within an
+unexpired generation, after a successful checkpoint, abrupt process termination can lose up to
+32 recent updates (including a checkpoint in flight), assuming a single writer and successful
+filesystem writes. Earlier checkpoints remain usable; a cold generation interrupted before its
+first publication has no checkpoint. Failed writes remain best-effort and may lose more hits.
 The size bound covers the published snapshot, not simultaneous temporary files or abandoned
 crash leftovers. Cache filesystem failures are misses, and replacement is not a guarantee of
 power-loss durability. Use a trusted cache directory: digests identify requests, but do not

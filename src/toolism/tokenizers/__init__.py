@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import AbstractContextManager, nullcontext
 
 from toolism.errors import TokenizerError
 from toolism.tokenizers.anthropic_tokenizer import AnthropicTokenizer
@@ -26,6 +27,13 @@ __all__ = [
 DEFAULT_TOKENIZER = "tiktoken:o200k_base"
 ENV_VAR = "TOOLISM_TOKENIZER"
 _FORMS = "use 'heuristic', 'tiktoken:<encoding>', 'anthropic:<model>' or 'gemini:<model>'"
+
+
+def _batch_counts(counter: Tokenizer) -> AbstractContextManager[None]:
+    """Batch only the built-in persistent cache; custom tokenizers need no lifecycle API."""
+    if isinstance(counter, AnthropicTokenizer) and counter._persistent is not None:
+        return counter._persistent.batch()
+    return nullcontext()
 
 
 def get_tokenizer(spec: str | Tokenizer | None = None) -> Tokenizer:

@@ -26,6 +26,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Changed
 
+- Batch persistent Anthropic count-cache writes during `measure` and `slim`, with periodic
+  checkpoints and a final flush, while preserving immediate writes for standalone tokenizer
+  calls. A crash can lose recent updates since the last checkpoint; published snapshots remain
+  complete and valid. Persistence remains opt-in via `TOOLISM_CACHE_DIR` (#145).
 - SL008 now also drops `additionalProperties: {}`, `minLength: 0`, `minItems: 0`,
   `minProperties: 0` and `uniqueItems: false`, which all equal the JSON Schema default.
 
