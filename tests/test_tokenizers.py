@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pytest
@@ -227,3 +227,99 @@ def test_get_tokenizer_anthropic_and_errors(monkeypatch: Any) -> None:
     with pytest.raises(TokenizerError, match="unknown tokenizer") as info:
         get_tokenizer("sentencepiece:foo")
     assert info.value.hint is not None
+
+
+def test_get_tokenizer_gemini(monkeypatch: Any) -> None:
+    from toolism.tokenizers import GeminiTokenizer
+    from toolism.tokenizers.gemini_tokenizer import to_gemini_tool
+
+    calls: list[dict[str, Any]] = []
+
+    def count_tokens(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        return SimpleNamespace(total_tokens=17 if "config" in kwargs else 2)
+
+    client = SimpleNamespace(models=SimpleNamespace(count_tokens=count_tokens))
+    monkeypatch.setattr(GeminiTokenizer, "_make_client", staticmethod(lambda: client))
+    tok = get_tokenizer("gemini:gemini-test")
+    assert isinstance(tok, GeminiTokenizer)
+    assert tok.name == "gemini:gemini-test"
+    assert not tok.local
+    assert not tok.approximate
+    assert tok.count_tools([TOOL, ToolDef(name="opaque", opaque=True)]) == 15
+    assert calls[0]["model"] == "gemini-test"
+    assert calls[0]["contents"] == "."
+    assert calls[0]["config"]["tools"][0]["function_declarations"][0]["name"] == "create_issue"
+    assert calls[0]["config"]["tools"][0]["function_declarations"][0] == {
+        "name": "create_issue",
+        "description": "Create an issue.",
+        "parameters_json_schema": TOOL.input_schema,
+    }
+    assert "config" not in calls[1]
+    assert tok.count_tool(TOOL) == 15
+    assert tok.count_tool(TOOL) == 15
+    assert len(calls) == 3
+    assert to_gemini_tool(ToolDef(name="minimal")) == {"name": "minimal"}
+
+
+def test_gemini_json_schema_validates_with_google_genai() -> None:
+    types = pytest.importorskip("google.genai.types")
+    from toolism.tokenizers.gemini_tokenizer import to_gemini_tool
+
+    schema = {
+        "type": "object",
+        "properties": {"item": {"$ref": "#/$defs/Item"}},
+        "$defs": {"Item": {"type": "string", "const": "example"}},
+        "additionalProperties": False,
+    }
+    declaration = to_gemini_tool(ToolDef(name="complex_schema", input_schema=schema))
+
+    config = types.CountTokensConfig.model_validate(
+        {"tools": [{"function_declarations": [declaration]}]}
+    )
+
+    function = config.tools[0].function_declarations[0]
+    assert function.parameters_json_schema == schema
+    assert function.parameters is None
+
+
+def test_gemini_requires_python_311_for_full_json_schema(monkeypatch: Any) -> None:
+    import toolism.tokenizers.gemini_tokenizer as gemini_tokenizer
+
+    monkeypatch.setattr(gemini_tokenizer, "_python_version", lambda: (3, 10))
+    with pytest.raises(TokenizerUnavailable, match=r"Python 3\.11 or newer"):
+        gemini_tokenizer.GeminiTokenizer("m")
+
+
+def test_gemini_setup_errors(monkeypatch: Any) -> None:
+    import toolism.tokenizers.gemini_tokenizer as gemini_tokenizer
+    from toolism.tokenizers import GeminiTokenizer
+
+    monkeypatch.setattr(gemini_tokenizer, "_python_version", lambda: (3, 14))
+
+    with monkeypatch.context() as missing_package:
+        missing_package.setitem(__import__("sys").modules, "google", None)
+        with pytest.raises(TokenizerUnavailable, match="google-genai package") as info:
+            GeminiTokenizer("m")
+    assert info.value.hint == "pip install 'toolism[gemini]'"
+
+    google = ModuleType("google")
+    google.genai = ModuleType("google.genai")  # type: ignore[attr-defined]
+    monkeypatch.setitem(__import__("sys").modules, "google", google)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    with pytest.raises(TokenizerUnavailable, match="GEMINI_API_KEY or GOOGLE_API_KEY") as info:
+        GeminiTokenizer("m")
+    assert info.value.hint is not None
+
+
+def test_gemini_api_failure_becomes_unavailable() -> None:
+    from toolism.tokenizers import GeminiTokenizer
+
+    def broken(**kwargs: Any) -> Any:
+        raise RuntimeError("401")
+
+    client = SimpleNamespace(models=SimpleNamespace(count_tokens=broken))
+    tok = GeminiTokenizer("m", client=client)
+    with pytest.raises(TokenizerUnavailable, match="Gemini count_tokens failed: 401"):
+        tok.count_tools([TOOL])
