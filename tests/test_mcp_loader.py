@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import builtins
+import io
 import sys
+import tempfile
 import textwrap
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -268,3 +270,46 @@ def test_timeout(tmp_path: Path) -> None:
 )
 def test_split_command_windows_rules(command: str, argv: list[str]) -> None:
     assert loader.split_command(command, posix=False) == argv
+
+
+
+# --------------------------------------------------------------- stderr helper
+
+
+def test_stderr_tail_ignores_missing_and_passthrough_logs(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert loader._stderr_tail(None) is None
+
+    passthrough = io.StringIO("visible stderr")
+    monkeypatch.setattr(sys, "stderr", passthrough)
+    assert loader._stderr_tail(passthrough) is None
+
+
+def test_stderr_tail_returns_none_for_blank_logs() -> None:
+    assert loader._stderr_tail(io.StringIO("\n  \t\n")) is None
+
+
+def test_stderr_tail_returns_none_when_reading_raises_oserror() -> None:
+    class UnreadableLog:
+        def flush(self) -> None:
+            raise OSError("log is unavailable")
+
+    assert loader._stderr_tail(UnreadableLog()) is None  # type: ignore[arg-type]
+
+
+def test_stderr_tail_returns_none_for_closed_log() -> None:
+    with tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as log:
+        log.write("server output\n")
+    assert loader._stderr_tail(log) is None
+
+
+def test_stderr_tail_keeps_last_nonblank_lines_in_order() -> None:
+    line_count = loader._STDERR_TAIL + 5
+    with tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as log:
+        for index in range(line_count):
+            log.write(f"line {index}\n  \n")
+
+        result = loader._stderr_tail(log)
+
+    assert result == "server stderr (last lines):\n  " + "\n  ".join(
+        f"line {index}" for index in range(5, line_count)
+    )
