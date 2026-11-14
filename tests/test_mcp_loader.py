@@ -272,7 +272,6 @@ def test_split_command_windows_rules(command: str, argv: list[str]) -> None:
     assert loader.split_command(command, posix=False) == argv
 
 
-
 # --------------------------------------------------------------- stderr helper
 
 
