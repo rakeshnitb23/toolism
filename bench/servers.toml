@@ -96,3 +96,10 @@ package = "pypi:arxiv-mcp-server"
 version = "0.8.2"
 command = "uvx --python 3.12 arxiv-mcp-server=={version}"
 notes = "Popular community server (Python)."
+
+[[server]]
+name = "chrome-devtools-mcp"
+package = "npm:chrome-devtools-mcp"
+version = "1.13.0"
+command = "npx -y chrome-devtools-mcp@{version}"
+notes = "Chrome DevTools's automation, debugging and insights server."
