@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Amazon Bedrock Converse support for full requests and bare tool lists. `toolism slim`
+  rewrites `toolSpec.inputSchema.json` and preserves `cachePoint` entries (#142).
 - `toolism rules RULE`: show a single rule by ID or name, with full details and options.
 - `toolism doctor` reports local versions and optional dependencies for bug reports,
   without network requests or revealing API keys.
