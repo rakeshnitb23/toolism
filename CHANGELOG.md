@@ -37,6 +37,13 @@ All notable changes to this project are documented here. The format follows
   so the CLI prints a single input-error line and exits 2, and the Python
   API raises `FormatError`.
 
+### Gemini tokenizer
+
+- Gemini tool schemas now use the SDK's full JSON Schema field, allowing schemas with `$defs` and
+  `$ref` to pass SDK validation without a live API key.
+- The Gemini extra requires Python 3.11 or newer because `google-genai` 3.0.0, which adds full
+  JSON Schema support, no longer supports Python 3.10.
+
 ## [0.2.0] - 2026-10-31
 
 toolism's second release lets you see every change before you make it, verifies more precisely,
