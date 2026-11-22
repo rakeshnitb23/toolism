@@ -19,7 +19,7 @@ from typing import Any
 from toolism.errors import MissingExtraError, RuleError, ToolismError
 from toolism.models import ToolDef, ToolSet
 from toolism.rules import Rule, Safety, all_rules, get_rule, resolve_options
-from toolism.tokenizers import HeuristicTokenizer, Tokenizer, get_tokenizer
+from toolism.tokenizers import HeuristicTokenizer, Tokenizer, _batch_counts, get_tokenizer
 from toolism.verify import Verdict, VerificationResult, check_equivalence, verify_available
 
 __all__ = [
@@ -35,14 +35,19 @@ __all__ = [
 
 @dataclass(frozen=True)
 class RuleStat:
+    """Token savings attributed to one rule."""
+
     rule_id: str
     name: str
     tokens_saved: int
     tools_changed: tuple[str, ...]
+    """Names of tools whose schemas this rule changed."""
 
 
 @dataclass(frozen=True)
 class ToolStat:
+    """Token counts for one tool before and after slimming."""
+
     name: str
     before: int
     after: int
@@ -69,17 +74,23 @@ class Rollback:
 
 @dataclass(frozen=True)
 class SlimReport:
+    """Token costs, per-rule and per-tool changes, and verification details for a slimming run."""
+
     tokenizer: str
     approximate: bool
     attribution_tokenizer: str
+    """Tokenizer used to attribute token savings to individual rules."""
     level: str
+    """Highest rule safety level enabled for the run."""
     before: int
     after: int
     tool_count: int
     uncounted: tuple[str, ...]
+    """Names of provider built-in tools whose tokens could not be counted."""
     rules: tuple[RuleStat, ...]
     tools: tuple[ToolStat, ...]
     passes: int
+    """Number of content-rule passes that were run."""
     warnings: tuple[str, ...]
     rollbacks: tuple[Rollback, ...]
     verification: tuple[VerificationResult, ...]
@@ -95,6 +106,8 @@ class SlimReport:
 
 @dataclass(frozen=True)
 class SlimResult:
+    """Slimmed tool set and the report describing its changes."""
+
     toolset: ToolSet
     report: SlimReport
 
@@ -386,27 +399,28 @@ def slim(
         )
         for rule_cls in chosen
     )
-    tool_stats = tuple(
-        ToolStat(before.name, reporting.count_tool(before), reporting.count_tool(after))
-        for before, after in zip(original, current, strict=True)
-        if not before.opaque
-    )
-    function_before = [t for t in original if not t.opaque]
-    function_after = [t for t in final if not t.opaque]
-    report = SlimReport(
-        tokenizer=reporting.name,
-        approximate=reporting.approximate,
-        attribution_tokenizer=attribution.name,
-        level=ceiling.label,
-        before=reporting.count_tools(function_before),
-        after=reporting.count_tools(function_after),
-        tool_count=len(function_before),
-        uncounted=tuple(t.name for t in original if t.opaque),
-        rules=rule_stats,
-        tools=tool_stats,
-        passes=passes,
-        warnings=tuple(warnings),
-        rollbacks=tuple(rollbacks),
-        verification=tuple(results),
-    )
+    with _batch_counts(reporting):
+        tool_stats = tuple(
+            ToolStat(before.name, reporting.count_tool(before), reporting.count_tool(after))
+            for before, after in zip(original, current, strict=True)
+            if not before.opaque
+        )
+        function_before = [t for t in original if not t.opaque]
+        function_after = [t for t in final if not t.opaque]
+        report = SlimReport(
+            tokenizer=reporting.name,
+            approximate=reporting.approximate,
+            attribution_tokenizer=attribution.name,
+            level=ceiling.label,
+            before=reporting.count_tools(function_before),
+            after=reporting.count_tools(function_after),
+            tool_count=len(function_before),
+            uncounted=tuple(t.name for t in original if t.opaque),
+            rules=rule_stats,
+            tools=tool_stats,
+            passes=passes,
+            warnings=tuple(warnings),
+            rollbacks=tuple(rollbacks),
+            verification=tuple(results),
+        )
     return SlimResult(toolset.replace_tools(final), report)

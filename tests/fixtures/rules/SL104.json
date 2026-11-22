@@ -1,0 +1,96 @@
+[
+  {
+    "name": "property description repeated as a sentence or line in the tool description is dropped",
+    "tool": {
+      "name": "t",
+      "description": "Search books. Free-text query to match against title.\nlimit: Maximum number of rows to return.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "Free-text query to match against title."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of rows to return"
+          }
+        }
+      }
+    },
+    "expected_schema": {
+      "type": "object",
+      "properties": {
+        "q": {
+          "type": "string"
+        },
+        "limit": {
+          "type": "integer"
+        }
+      }
+    }
+  },
+  {
+    "name": "short description like 'The ID.' is not dropped even when it appears in the tool description",
+    "tool": {
+      "name": "t",
+      "description": "Look up a user by The ID. The ID.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The ID."
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "a substring inside a longer sentence keeps the property description",
+    "tool": {
+      "name": "t",
+      "description": "Search books where the free-text query matches the title or author.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "the free-text query matches"
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "a partial match keeps the property description",
+    "tool": {
+      "name": "t",
+      "description": "Search books.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "is the free-text query"
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "properties without descriptions are unchanged",
+    "tool": {
+      "name": "t",
+      "description": "Search books.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+]

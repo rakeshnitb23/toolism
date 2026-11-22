@@ -22,6 +22,12 @@ Only the latest release receives security fixes.
 - **`--mcp-url URL` connects to that HTTP endpoint** to initialize an MCP session and list
   tools. It does not execute tools or configure OAuth/authentication headers. Use an endpoint
   you intend to contact; remote definitions are handled as data, like tool definition files.
+- **`--mcp-config FILE` starts every stdio server listed in that file**, each the way `--mcp`
+  would, with that entry's `command`, `args` and `env` added to your environment. Only point it
+  at a config whose servers you would run anyway. toolism never prints `env` values: a failing
+  server is reported by its name, without its command line, and any `env` or argument value of
+  3 or more characters is masked if the server's error repeats it. With `TOOLISM_DEBUG=1` the
+  servers' own stderr is passed through unfiltered.
 - **`anthropic:<model>` tokenization** sends the tool definitions to Anthropic's `count_tokens`
   API using your `ANTHROPIC_API_KEY`. The `heuristic` and `tiktoken:*` tokenizers count locally;
   tiktoken downloads its vocabulary file once on first use (set `TIKTOKEN_CACHE_DIR` to control

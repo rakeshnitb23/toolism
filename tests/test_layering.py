@@ -21,7 +21,7 @@ ALLOWED: dict[str, set[str]] = {
     "schema": {"errors"},
     "formats": {"errors", "models"},
     "io": {"errors", "models", "formats"},
-    "tokenizers": {"errors", "models"},
+    "tokenizers": {"errors", "models", "__about__"},
     "loaders": {"errors", "models", "formats"},
     "rules": {"errors", "models", "schema"},
     "verify": {"errors", "schema"},

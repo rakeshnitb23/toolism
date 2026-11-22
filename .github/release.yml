@@ -1,0 +1,5 @@
+# Generated release notes credit contributors, so routine dependency bumps stay out of them.
+changelog:
+  exclude:
+    authors:
+      - dependabot[bot]

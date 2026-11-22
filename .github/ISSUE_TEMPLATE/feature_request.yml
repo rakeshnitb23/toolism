@@ -1,0 +1,47 @@
+name: Feature request
+description: Suggest a new format, CLI option, integration or other feature
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement to toolism. Please describe the problem first, then show what a useful solution would look like.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Who runs into this problem, and what are they unable to do today?
+      placeholder: I use toolism with...
+    validations:
+      required: true
+
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: Proposed behaviour
+      description: |
+        Describe what you would like toolism to do. Include a concrete CLI or Python example where possible, for example:
+
+        CLI: `toolism slim tools.json --some-option`
+
+        Python: `toolism.slim(toolset, some_option=True)`
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or other approaches have you considered? Why are they insufficient?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I'd like to work on this
+          required: false

@@ -92,5 +92,21 @@
       "a": {"type": "integer"},
       "b": {"type": ["string", "null", "integer"]}
     }, "required": ["a", "b"]}
+  },
+  {
+    "name": "empty anyOf branch list remains unchanged",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"anyOf": []}}}}
+  },
+  {
+    "name": "empty oneOf branch list remains unchanged",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"oneOf": []}}}}
+  },
+  {
+    "name": "empty branch type remains unchanged",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"anyOf": [{"type": []}, {"type": "null"}]}}}}
+  },
+  {
+    "name": "non-string branch type remains unchanged",
+    "tool": {"name": "t", "schema": {"type": "object", "properties": {"x": {"anyOf": [{"type": ["string", 1]}, {"type": "null"}]}}}}
   }
 ]

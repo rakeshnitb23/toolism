@@ -40,6 +40,9 @@ def build_args(env: Mapping[str, str], temp: Path) -> list[str]:
     if bool(source) == bool(mcp):
         raise ActionInputError("set exactly one of the `source` and `mcp` inputs")
     args = ["check", *(["--mcp", mcp] if mcp else [source])]
+    mcp_timeout = _get(env, "mcp-timeout")
+    if mcp_timeout:
+        args += ["--mcp-timeout", mcp_timeout]
     baseline = _get(env, "baseline")
     if baseline:
         args += ["--baseline", baseline]

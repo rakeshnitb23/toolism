@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+type: software
+title: toolism
+authors:
+  - family-names: Singh
+    given-names: Rakesh
+abstract: >-
+  Your agent pays for its tool definitions on every single request. toolism
+  measures that cost and cuts it, without changing which tool calls are valid.
+version: 0.2.0
+date-released: "2026-10-31"
+url: https://github.com/rakeshnitb23/toolism
+license: MIT

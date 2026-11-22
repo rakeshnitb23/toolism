@@ -77,6 +77,11 @@ def test_documented_workflow(tmp_path: Path) -> None:
     assert [r.id for r in toolism.list_rules()][:2] == ["SL001", "SL002"]
 
 
+def test_loads_accepts_a_utf8_bom() -> None:
+    text = "\ufeff" + FIXTURE.read_text(encoding="utf-8")
+    assert toolism.loads(text).format is toolism.ToolFormat.MCP
+
+
 def test_slim_tools_keeps_shape_and_returns_fresh_objects() -> None:
     first: Any = toolism.slim_tools(ANTHROPIC)
     assert isinstance(first, list)

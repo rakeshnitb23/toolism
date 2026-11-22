@@ -57,6 +57,7 @@ def test_select_rules_by_level_enable_disable() -> None:
         "SL101",
         "SL102",
         "SL103",
+        "SL104",
     ]  # the level is the gate for lossy rules
     assert "SL101" in [r.id for r in select_rules("safe", enable=["max-description-length"])]
     assert "SL001" not in [r.id for r in select_rules("safe", disable=["SL001"])]

@@ -23,13 +23,30 @@ def _reject_constant(name: str) -> Any:
 
 def loads(text: str) -> ToolSet:
     """Parse a JSON string into a :class:`ToolSet`."""
+    if text.startswith("\ufeff"):  # Windows editors and PowerShell save UTF-8 BOMs
+        text = text[1:]
     try:
         document = json.loads(text, parse_constant=_reject_constant)
     except json.JSONDecodeError as exc:
         raise FormatError(
             f"invalid JSON at line {exc.lineno}, column {exc.colno}: {exc.msg}"
         ) from exc
-    return parse(document)
+    except RecursionError as exc:
+        # Extremely deep JSON can exhaust the stack inside the decoder itself,
+        # before parse() gets a chance to apply its depth limit (#138).
+        raise FormatError(
+            "input is nested too deeply",
+            hint="flatten the schema or split it into smaller tools",
+        ) from exc
+    try:
+        return parse(document)
+    except RecursionError as exc:
+        # Backstop for any recursive path the depth check does not cover:
+        # a stack exhaustion on input is an input error, not a bug report.
+        raise FormatError(
+            "input is nested too deeply",
+            hint="flatten the schema or split it into smaller tools",
+        ) from exc
 
 
 def _read(source: Source) -> str:
