@@ -53,7 +53,8 @@ pipx install "toolism[mcp]"                       # isolated, always-on-PATH ins
 
 ## 30-second tour
 
-**Measure** what your tools cost (OpenAI, Anthropic and MCP JSON are detected automatically):
+**Measure** what your tools cost (OpenAI, Anthropic, MCP and Amazon Bedrock Converse JSON
+are detected automatically):
 
 ```console
 $ toolism measure examples/mcp_tools.json
@@ -85,6 +86,14 @@ Savings by rule
 │ SL005 │ description-whitespace │     −6 │     3 │
 │ SL006 │ echo-description       │    −17 │     1 │
 └───────┴────────────────────────┴────────┴───────┘
+```
+
+For Bedrock Converse, `converse.json` can contain a request with `toolConfig.tools` or just
+the tool list. toolism slims each schema at `toolSpec.inputSchema.json` and keeps
+`cachePoint` entries in their original positions.
+
+```console
+$ toolism slim converse.json -o converse.slim.json
 ```
 
 Point it at a live MCP server instead of a file with `--mcp`:
@@ -227,7 +236,7 @@ toolism.dump(result.toolset, "tools.slim.json")  # same format and envelope as t
 In an agent, slim once and send the slim tools with every request:
 
 ```python
-tools = toolism.slim_tools(my_tools)  # same shape back (OpenAI, Anthropic or MCP dicts)
+tools = toolism.slim_tools(my_tools)  # returns tools in the same format
 client.messages.create(model=..., tools=tools, messages=...)
 ```
 
