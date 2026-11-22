@@ -16,9 +16,9 @@ property name, `anyOf` wrappers for optional fields, `default: null`, `$schema` 
 `$defs`. toolism removes exactly that, proves or tests that the result accepts the same tool
 calls, and gives you a CI gate so the cost can't creep back up.
 
-On 14 tool sets (159 tools from 13 popular MCP servers, including the official reference servers,
-GitHub, Playwright, Notion, Context7 and AWS docs, plus one generated Pydantic server), the default safe rules cut tool-definition tokens by
-**37.4% in total, with a median of 11.3% per tool set**: 22% on the official git server, 34% on
+On 15 tool sets (192 tools from 14 popular MCP servers, including the official reference servers,
+GitHub, Playwright, Notion, Context7, Chrome DevTools and AWS docs, plus one generated Pydantic server), the default safe rules cut tool-definition tokens by
+**33.2% in total, with a median of 11.1% per tool set**: 22% on the official git server, 34% on
 a typical Pydantic-typed server, 73% on Notion (which copies the same nine `$defs` into all 24
 tools; 18 of them use none).
 Lean, hand-tuned schemas save almost nothing, and the [benchmark](https://github.com/rakeshnitb23/toolism/blob/master/bench/RESULTS.md) shows those
