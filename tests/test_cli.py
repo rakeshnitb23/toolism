@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -670,8 +671,10 @@ def test_diff_mcp_timeout_requires_a_number(runner: CliRunner) -> None:
     assert result.exit_code == 2
     # Typer's wording changed in 0.29 ("'soon' is not a valid float" became "Input should be a
     # valid number"), so assert only on the parts both versions share.
-    assert "Invalid value for '--mcp-timeout'" in result.stderr
-    assert "valid" in result.stderr
+    # CI forces colour, and Rich styles the option name separately, so strip ANSI codes first.
+    stderr = re.sub(r"\x1b\[[0-9;]*m", "", result.stderr)
+    assert "Invalid value for '--mcp-timeout'" in stderr
+    assert "valid" in stderr
 
 
 @pytest.mark.parametrize("document", [[], {"tools": [BLOATED["tools"][0]] * 2}])
