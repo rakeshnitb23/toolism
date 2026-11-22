@@ -1,6 +1,6 @@
 # JSON output
 
-`measure`, `slim`, and `check` can all emit machine-readable reports for CI
+`measure`, `slim`, `diff`, and `check` can all emit machine-readable reports for CI
 scripts and dashboards. The reports are versioned: every one carries
 `"toolism_report": 1` and a `"kind"` field naming the report type.
 
@@ -12,7 +12,7 @@ scripts and dashboards. The reports are versioned: every one carries
 - A removal or rename means a version bump, so a consumer written against
   version 1 keeps parsing.
 - `kind` tells you which top-level shape to expect: `measure`,
-  `measure_sources`, `slim`, or `check`.
+  `measure_sources`, `slim`, `diff`, or `check`.
 
 Token counts are integers everywhere. Averages and percentages are
 floats, rounded to 2 decimals. Optional cost estimates are unrounded floats. Percentages in `measure` are per-tool shares
@@ -235,6 +235,46 @@ Top-level fields:
 | `warnings` | Non-fatal warnings from slimming. |
 | `rollbacks` | Tools rolled back after verification, each with `tool`, `rules`, `reverted`, `direction`, and `example`. |
 | `verification` | Per-tool verification outcomes, each with `tool`, `verdict`, `method`, `direction`, and `reason`. Empty when verification did not run. |
+
+## `diff`
+
+`toolism diff -f json` previews the description and input schema before and after
+slimming. For example, this tool has a redundant schema title.
+
+```sh
+echo '[{"name":"ping","inputSchema":{"type":"object","title":"PingArguments"}}]' | toolism diff - -f json
+```
+
+```json
+{
+  "toolism_report": 1,
+  "kind": "diff",
+  "tokenizer": "heuristic",
+  "approximate": true,
+  "tools": [
+    {
+      "name": "ping",
+      "changed": true,
+      "before": {"description": null, "input_schema": {"type": "object", "title": "PingArguments"}, "tokens": 16},
+      "after": {"description": null, "input_schema": {"type": "object"}, "tokens": 11},
+      "rules": ["SL001"]
+    }
+  ],
+  "uncounted": [],
+  "warnings": []
+}
+```
+
+- `tools` follows input order and includes unchanged tools. Repeated names have a
+  separate entry for each occurrence. Opaque provider tools appear by name in `uncounted`.
+- Each `before` and `after` holds the description, input schema and estimated token
+  count for that tool. `tokenizer` identifies the local heuristic and `approximate` is true.
+- `changed` is true when the description or schema differs. `rules` lists the IDs
+  of rules that changed that tool's content. A change to tool order alone leaves
+  `changed` false and `rules` empty.
+- `warnings` contains non-fatal messages, such as duplicate tool names.
+  With `--exit-code`, the report is written in either case and the command exits
+  1 if any tool changed, 0 otherwise.
 
 ## `check`
 

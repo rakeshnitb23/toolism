@@ -13,6 +13,8 @@ All notable changes to this project are documented here. The format follows
   MCP timeout and connection-error hints; live and file inputs are mutually exclusive.
 - Amazon Bedrock Converse support for full requests and bare tool lists. `toolism slim`
   rewrites `toolSpec.inputSchema.json` and preserves `cachePoint` entries (#142).
+- `toolism diff -f json` reports each tool's description, input schema and token count
+  before and after slimming, along with the rules that changed it (#205).
 - `toolism rules RULE`: show a single rule by ID or name, with full details and options.
 - `toolism doctor` reports local versions and optional dependencies for bug reports,
   without network requests or revealing API keys.

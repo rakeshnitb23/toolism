@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import pytest
@@ -9,9 +9,10 @@ import pytest
 from toolism.formats import parse
 from toolism.measurement import SourceCount, TokenReport, ToolCount, measure, measure_sources
 from toolism.models import ToolDef
-from toolism.pipeline import Rollback, slim
+from toolism.pipeline import Rollback, ToolStat, slim
 from toolism.report import (
     REPORT_VERSION,
+    diff_report_to_dict,
     render_slim_report,
     render_sources_report,
     render_token_report,
@@ -19,6 +20,7 @@ from toolism.report import (
     sources_report_to_dict,
     token_report_to_dict,
 )
+from toolism.rules import Rule, Safety
 from toolism.tokenizers import HeuristicTokenizer
 from toolism.tokenizers.anthropic_tokenizer import to_anthropic_tool
 from toolism.verify import Verdict, VerificationResult
@@ -181,6 +183,68 @@ def test_slim_report_with_no_changes() -> None:
     assert "Savings by rule" not in text
     md = render_slim_report(report, "markdown")
     assert "| Rule |" not in md
+
+
+def test_diff_report_tracks_each_occurrence_in_input_order() -> None:
+    before = parse(
+        [
+            {"type": "function", "name": "z"},
+            {"type": "web_search"},
+            {"type": "function", "name": "read", "description": "Read "},
+            {"type": "function", "name": "read", "parameters": {"type": "object", "title": "Read"}},
+        ]
+    )
+    result = slim(before, tokenizer=H, enable=["SL007"])
+    data = diff_report_to_dict(before, result)
+    rows = data["tools"]
+    assert (data["toolism_report"], data["kind"]) == (REPORT_VERSION, "diff")
+    assert (data["tokenizer"], data["approximate"]) == ("heuristic", True)
+    assert data["uncounted"] == ["web_search"]
+    assert data["warnings"] == ["duplicate tool name 'read' (2 times)"]
+    assert [(r["name"], r["changed"], r["rules"]) for r in rows] == [
+        ("z", False, []),
+        ("read", True, ["SL005"]),
+        ("read", True, ["SL001"]),
+    ]
+    z, first, second = before.function_tools()
+    # Adding rule attribution preserves the original count-based ToolStat equality.
+    stat = result.report.tools[1]
+    assert stat == ToolStat(first.name, stat.before, stat.after)
+    expected_after = [
+        z,
+        first.replace(description="Read"),
+        second.replace(input_schema={"type": "object"}),
+    ]
+    for row, original, rewritten in zip(rows, before.function_tools(), expected_after, strict=True):
+        for key, tool in (("before", original), ("after", rewritten)):
+            assert row[key] == {
+                "description": tool.description,
+                "input_schema": tool.input_schema,
+                "tokens": H.count_tool(tool),
+            }
+
+
+def test_diff_report_pairs_duplicates_reversed_by_a_custom_rule() -> None:
+    class Reverse(Rule):
+        id = "SL099"
+        name = "reverse"
+        summary = "Reverse tool order"
+        safety = Safety.SAFE
+        reorders = True
+
+        def apply(
+            self, tools: tuple[ToolDef, ...], options: Mapping[str, Any]
+        ) -> tuple[ToolDef, ...]:
+            return tools[::-1]
+
+    before = parse([{"name": "read", "description": d} for d in ("First", "Second version")])
+    result = slim(before, tokenizer=H, rules=[Reverse])
+    assert result.toolset.tools == before.tools[::-1]
+    rows = diff_report_to_dict(before, result)["tools"]
+    assert [row["after"]["description"] for row in rows] == ["First", "Second version"]
+    assert all(
+        row["before"] == row["after"] and not row["changed"] and not row["rules"] for row in rows
+    )
 
 
 def test_docs_rules_md_is_up_to_date() -> None:

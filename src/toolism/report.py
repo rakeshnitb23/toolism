@@ -17,13 +17,14 @@ from rich.text import Text
 
 from toolism.measurement import SourcesReport, TokenReport
 from toolism.models import ToolDef, ToolSet
-from toolism.pipeline import SlimReport
+from toolism.pipeline import SlimReport, SlimResult
 from toolism.rules import Rule, Safety, all_rules
 from toolism.verify import Verdict
 
 __all__ = [
     "REPORT_VERSION",
     "Format",
+    "diff_report_to_dict",
     "render_rules",
     "render_slim_report",
     "render_sources_report",
@@ -398,6 +399,42 @@ def _color_diff_line(line: str) -> str:
     if body.startswith("+") and not body.startswith("+++"):
         return f"\x1b[32m{body}\x1b[0m{nl}"
     return line
+
+
+def diff_report_to_dict(before: ToolSet, result: SlimResult) -> dict[str, Any]:
+    """Describe the content changes from one slimming run, in the input's order."""
+    report = result.report
+    after = result.before_reorder or result.toolset
+    tools = []
+    for original, rewritten, stat in zip(
+        before.function_tools(), after.function_tools(), report.tools, strict=True
+    ):
+        tools.append(
+            {
+                "name": original.name,
+                "changed": original.fingerprint() != rewritten.fingerprint(),
+                "before": {
+                    "description": original.description,
+                    "input_schema": original.input_schema,
+                    "tokens": stat.before,
+                },
+                "after": {
+                    "description": rewritten.description,
+                    "input_schema": rewritten.input_schema,
+                    "tokens": stat.after,
+                },
+                "rules": list(stat.rules),
+            }
+        )
+    return {
+        "toolism_report": REPORT_VERSION,
+        "kind": "diff",
+        "tokenizer": report.tokenizer,
+        "approximate": report.approximate,
+        "tools": tools,
+        "uncounted": list(report.uncounted),
+        "warnings": list(report.warnings),
+    }
 
 
 def render_tool_diff(before: ToolSet, after: ToolSet, *, color: bool = False) -> str:
