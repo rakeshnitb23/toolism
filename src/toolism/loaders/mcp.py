@@ -68,11 +68,26 @@ def split_command(command: str | Sequence[str], *, posix: bool | None = None) ->
     return argv
 
 
+def _sdk_missing(exc: ImportError) -> bool:
+    """True when the MCP SDK itself is absent, not when something it imports is broken."""
+    name = exc.name or ""
+    return isinstance(exc, ModuleNotFoundError) and (name == "mcp" or name.startswith("mcp."))
+
+
+def _broken_sdk(exc: ImportError) -> LoaderError:
+    return LoaderError(
+        f"the MCP SDK is installed but failed to import: {exc}",
+        hint="reinstall it with pip install --force-reinstall 'toolism[mcp]'",
+    )
+
+
 def _import_mcp() -> tuple[Any, Any, Any, Any]:
     try:
         from mcp import ClientSession, StdioServerParameters, types
         from mcp.client.stdio import stdio_client
-    except ImportError:
+    except ImportError as exc:
+        if not _sdk_missing(exc):
+            raise _broken_sdk(exc) from exc
         raise MissingExtraError("Loading tools from an MCP server", "mcp") from None
     return ClientSession, StdioServerParameters, stdio_client, types
 
@@ -217,19 +232,20 @@ def load_mcp_stdio(
 
 
 def _import_mcp_http() -> tuple[Any, Any, Any]:
+    error = MissingExtraError("Loading tools from a streamable-HTTP MCP server", "mcp")
+    error.hint = "pip install --upgrade 'toolism[mcp]' (an SDK with streamable HTTP is needed)"
     try:
         from mcp import ClientSession, types
         from mcp.client import streamable_http
-
-        transport = getattr(streamable_http, "streamable_http_client", None)
-        if transport is None:  # older SDK 1.x spelling
-            transport = getattr(streamable_http, "streamablehttp_client", None)
-        if transport is None:
-            raise ImportError("MCP SDK has no streamable-HTTP client")
-    except ImportError:
-        error = MissingExtraError("Loading tools from a streamable-HTTP MCP server", "mcp")
-        error.hint = "pip install --upgrade 'toolism[mcp]' (an SDK with streamable HTTP is needed)"
+    except ImportError as exc:
+        if not _sdk_missing(exc):
+            raise _broken_sdk(exc) from exc
         raise error from None
+    transport = getattr(streamable_http, "streamable_http_client", None)
+    if transport is None:  # older SDK 1.x spelling
+        transport = getattr(streamable_http, "streamablehttp_client", None)
+    if transport is None:
+        raise error
     return ClientSession, transport, types
 
 

@@ -138,13 +138,31 @@ def test_http_missing_extra_fails_with_install_hint(monkeypatch: pytest.MonkeyPa
 
     def fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
         if name == "mcp" or name.startswith("mcp."):
-            raise ImportError(name)
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     with pytest.raises(MissingExtraError) as info:
         loader.load_mcp_http("http://127.0.0.1:1/mcp")
     assert "toolism[mcp]" in info.value.hint
+
+
+def test_http_broken_sdk_dependency_is_not_reported_as_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_import = builtins.__import__
+
+    def fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "mcp" or name.startswith("mcp."):
+            raise ModuleNotFoundError("No module named 'httpx_sse'", name="httpx_sse")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    with pytest.raises(LoaderError) as info:
+        loader.load_mcp_http("http://127.0.0.1:1/mcp")
+    assert not isinstance(info.value, MissingExtraError)
+    assert "httpx_sse" in info.value.message
+    assert isinstance(info.value.__cause__, ModuleNotFoundError)
 
 
 def test_http_older_transport_name_and_three_item_yield(monkeypatch: pytest.MonkeyPatch) -> None:

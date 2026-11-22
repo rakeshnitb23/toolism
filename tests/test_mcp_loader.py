@@ -165,13 +165,28 @@ def test_missing_extra(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
         if name == "mcp" or name.startswith("mcp."):
-            raise ImportError(name)
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
         return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     with pytest.raises(MissingExtraError) as info:
         loader.load_mcp_stdio("anything")
     assert info.value.hint == "pip install 'toolism[mcp]'"
+
+
+def test_broken_sdk_dependency_keeps_original_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_import = builtins.__import__
+
+    def fake_import(name: str, *args: Any, **kwargs: Any) -> Any:
+        if name == "mcp" or name.startswith("mcp."):
+            raise ImportError("cannot import name 'BaseModel' from 'pydantic'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    with pytest.raises(LoaderError) as info:
+        loader.load_mcp_stdio("anything")
+    assert not isinstance(info.value, MissingExtraError)
+    assert "BaseModel" in info.value.message
 
 
 # --------------------------------------------------------------- integration
