@@ -654,8 +654,10 @@ def test_diff_mcp_loader_failure(runner: CliRunner, monkeypatch: pytest.MonkeyPa
 def test_diff_mcp_timeout_requires_a_number(runner: CliRunner) -> None:
     result = invoke(runner, "diff", "--mcp", "must-not-start", "--mcp-timeout", "soon")
     assert result.exit_code == 2
-    assert "soon" in result.stderr
-    assert "valid float" in result.stderr
+    # Typer's wording changed in 0.29 ("'soon' is not a valid float" became "Input should be a
+    # valid number"), so assert only on the parts both versions share.
+    assert "Invalid value for '--mcp-timeout'" in result.stderr
+    assert "valid" in result.stderr
 
 
 @pytest.mark.parametrize("document", [[], {"tools": [BLOATED["tools"][0]] * 2}])
