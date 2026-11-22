@@ -96,29 +96,34 @@ def test_http_cli_failures_are_one_error_line_with_hint(
     assert "Traceback" not in result.stderr
 
 
-@pytest.mark.parametrize("command", ["measure", "slim", "check"])
+@pytest.mark.parametrize("command", ["measure", "slim", "check", "diff"])
 def test_http_cli_routes_through_real_loader(command: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
     with serve_http() as endpoint:
-        args = [command, "--mcp-url", endpoint.url, "-t", "heuristic"]
+        args = [command, "--mcp-url", endpoint.url]
+        if command != "diff":
+            args += ["-t", "heuristic"]
         if command == "slim":
             args += ["--quiet"]
-        else:
+        elif command in ("measure", "check"):
             args += ["-f", "json"]
         if command == "check":
             args += ["--max-total", "10000"]
         result = CliRunner().invoke(cli.app, args)
     assert result.exit_code == 0, result.output
-    data = json.loads(result.stdout)
-    if command == "slim":
+    if command == "diff":
+        assert '--- "first" (before)' in result.stdout
+        assert '-    "title": "firstArguments"' in result.stdout
+    elif command == "slim":
+        data = json.loads(result.stdout)
         assert [t["name"] for t in data["tools"]] == ["first", "second"]
         assert "title" not in data["tools"][0]["inputSchema"]
     else:
-        assert data["kind"] == command
+        assert json.loads(result.stdout)["kind"] == command
     assert len([r for r in endpoint.requests if r["method"] == "tools/list"]) == 2
 
 
-@pytest.mark.parametrize("command", ["measure", "slim", "check"])
+@pytest.mark.parametrize("command", ["measure", "slim", "check", "diff"])
 @pytest.mark.parametrize("other", [["missing.json"], ["-"], ["--mcp", "do-not-start"]])
 def test_http_cli_rejects_conflicting_inputs_before_connecting(
     command: str, other: list[str]
@@ -194,7 +199,7 @@ def test_http_missing_transport_has_upgrade_hint(monkeypatch: pytest.MonkeyPatch
     assert "--upgrade" in info.value.hint
 
 
-@pytest.mark.parametrize("command", ["measure", "slim", "check"])
+@pytest.mark.parametrize("command", ["measure", "slim", "check", "diff"])
 def test_http_cli_timeout_option(command: str, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TOOLISM_DEBUG", raising=False)
     with serve_http(delay="tools/list") as endpoint:

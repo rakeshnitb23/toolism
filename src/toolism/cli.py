@@ -478,6 +478,7 @@ def diff(
     source: SourceArg = None,
     mcp: McpOpt = None,
     mcp_timeout: McpTimeoutOpt = 60.0,
+    mcp_url: McpUrlOpt = None,
     level: Annotated[
         Level,
         typer.Option("--level", "-l", help="safe: redundant text; annotations: also lossy text."),
@@ -509,7 +510,7 @@ def diff(
     for assignment in option or []:
         rule_key, key, value = parse_option_assignment(assignment)
         options.setdefault(rule_key, {})[key] = value
-    toolset = _load(source, mcp, mcp_timeout)
+    toolset = _load(source, mcp, mcp_timeout, mcp_url=mcp_url)
     result = slim_toolset(
         toolset,
         level=level.value,
