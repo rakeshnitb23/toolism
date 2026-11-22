@@ -294,6 +294,20 @@ def test_slim_output_file_compact_and_quiet(
     }
 
 
+@pytest.mark.parametrize("options", [(), ("--enable", "SL007")], ids=["default", "stable-order"])
+def test_slim_bedrock_preserves_cache_boundary(runner: CliRunner, options: tuple[str, ...]) -> None:
+    source = FIXTURES / "bedrock_converse.json"
+    result = invoke(runner, "slim", source, *options)
+    assert result.exit_code == 0, result.output
+    expected = json.loads(source.read_text(encoding="utf-8"))
+    tools = expected["toolConfig"]["tools"]
+    schema = tools[0]["toolSpec"]["inputSchema"]["json"]
+    del schema["properties"]["city"]["title"]
+    if options:
+        tools[0], tools[1] = tools[1], tools[0]  # sort forecast before weather inside the prefix
+    assert result.stdout == json.dumps(expected, indent=2, ensure_ascii=False) + "\n"
+
+
 def test_slim_json_report_to_file(runner: CliRunner, bloated: Path, tmp_path: Path) -> None:
     report = tmp_path / "report.json"
     result = invoke(runner, "slim", bloated, "-r", "json", "--report-file", report)

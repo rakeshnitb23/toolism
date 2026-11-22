@@ -1,0 +1,27 @@
+{
+  "messages": [{"role": "user", "content": [{"text": "What is the weather in Accra?"}]}],
+  "toolConfig": {
+    "tools": [
+      {
+        "toolSpec": {
+          "description": "Get the weather for a city.",
+          "name": "weather",
+          "inputSchema": {
+            "json": {
+              "properties": {"city": {"type": "string", "title": "City"}},
+              "type": "object",
+              "required": ["city"]
+            },
+            "x-origin": "generator"
+          },
+          "strict": true
+        },
+        "x-version": 2
+      },
+      {"toolSpec": {"name": "forecast", "inputSchema": {"json": {"type": "object"}}}},
+      {"cachePoint": {"type": "default"}},
+      {"toolSpec": {"name": "clock", "inputSchema": {"json": {"type": "object"}}}}
+    ],
+    "toolChoice": {"tool": {"name": "weather"}}
+  }
+}
