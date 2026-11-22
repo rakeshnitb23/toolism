@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Streamable-HTTP MCP loading with `--mcp-url URL` on `measure`, `slim` and `check`,
+  plus `load_mcp_http` and its async variant. Includes bounded pagination, the shared
+  MCP timeout and connection-error hints; live and file inputs are mutually exclusive.
 - Amazon Bedrock Converse support for full requests and bare tool lists. `toolism slim`
   rewrites `toolSpec.inputSchema.json` and preserves `cachePoint` entries (#142).
 - `toolism rules RULE`: show a single rule by ID or name, with full details and options.
