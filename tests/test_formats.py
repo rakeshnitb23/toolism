@@ -27,6 +27,7 @@ def test_round_trip_is_exact(path: Path) -> None:
         ("openai_chat.json", ToolFormat.OPENAI_CHAT, (), 2, 0),
         ("openai_responses.json", ToolFormat.OPENAI_RESPONSES, ("tools",), 2, 1),
         ("anthropic.json", ToolFormat.ANTHROPIC, ("tools",), 2, 1),
+        ("bedrock_converse.json", ToolFormat.BEDROCK, ("toolConfig", "tools"), 4, 1),
         ("mcp_result.json", ToolFormat.MCP, ("result", "tools"), 1, 0),
         ("mcp_tools.json", ToolFormat.MCP, ("tools",), 2, 0),
         ("legacy_functions.json", ToolFormat.OPENAI_RESPONSES, ("functions",), 2, 0),
@@ -59,6 +60,52 @@ def test_opaque_tools_keep_names() -> None:
     anthropic = load(FIXTURES / "anthropic.json")
     assert anthropic.tools[1].name == "web_search"
     assert anthropic.tools[1].opaque
+
+
+@pytest.mark.parametrize("bare", [False, True], ids=["envelope", "bare"])
+def test_bedrock_round_trip_preserves_key_order(bare: bool) -> None:
+    document = json.loads((FIXTURES / "bedrock_converse.json").read_text(encoding="utf-8"))
+    items = document["toolConfig"]["tools"]
+    source = items if bare else document
+    ts = parse(source)
+    assert ts.format is ToolFormat.BEDROCK
+    weather, forecast, clock = ts.function_tools()
+    assert (weather.name, forecast.name, clock.name) == ("weather", "forecast", "clock")
+    assert weather.strict is True
+    assert weather.description == "Get the weather for a city."
+    assert weather.input_schema == items[0]["toolSpec"]["inputSchema"]["json"]
+    assert dumps(ts) == json.dumps(source, indent=2, ensure_ascii=False) + "\n"
+
+
+def test_bedrock_only_opaque_members() -> None:
+    items = [{"cachePoint": {"type": "default"}}, {"systemTool": {"name": "web_search"}}]
+    ts = parse(items)
+    assert ts.format is ToolFormat.BEDROCK
+    assert ts.function_tools() == ()
+    assert serialize(ts) == items
+
+
+def test_bedrock_envelope_disambiguates_item_metadata() -> None:
+    item = {"name": "metadata", "toolSpec": {"name": "read", "inputSchema": {"json": {}}}}
+    ts = parse({"toolConfig": {"tools": [item]}})
+    assert ts.format is ToolFormat.BEDROCK
+    assert ts.tools[0].name == "read"
+    assert serialize(ts) == {"toolConfig": {"tools": [item]}}
+    with pytest.raises(FormatError, match="unrecognised tool item"):
+        parse({"functions": [{"toolSpec": item["toolSpec"]}]})
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {"toolSpec": {"name": "t", "inputSchema": {"json": {}}}, "cachePoint": {"type": "default"}},
+        {"toolSpec": {"name": "t", "inputSchema": []}},
+        {"cachePoint": "default"},
+    ],
+)
+def test_rejects_invalid_bedrock_items(item: object) -> None:
+    with pytest.raises(FormatError):
+        parse([item])
 
 
 def test_rewritten_fields_are_written_back_in_place() -> None:
@@ -114,6 +161,17 @@ def test_serialize_does_not_mutate_toolset_document() -> None:
             {"name": "t", "description": "d", "input_schema": {}, "strict": True},
         ),
         (ToolFormat.MCP, {"name": "t", "description": "d", "inputSchema": {}, "strict": True}),
+        (
+            ToolFormat.BEDROCK,
+            {
+                "toolSpec": {
+                    "name": "t",
+                    "description": "d",
+                    "inputSchema": {"json": {}},
+                    "strict": True,
+                }
+            },
+        ),
     ],
 )
 def test_programmatic_toolset_serializes_from_templates(
@@ -128,6 +186,13 @@ def test_programmatic_toolset_serializes_from_templates(
 def test_programmatic_toolset_with_path_builds_envelope() -> None:
     ts = ToolSet(tools=(ToolDef(name="t"),), format=ToolFormat.MCP, path=("result", "tools"))
     assert serialize(ts) == {"result": {"tools": [{"name": "t"}]}}
+
+
+@pytest.mark.parametrize("schema", [None, [], False])
+def test_bedrock_write_requires_an_object_schema(schema: object) -> None:
+    ts = ToolSet((ToolDef(name="t", input_schema=schema),), format=ToolFormat.BEDROCK)
+    with pytest.raises(FormatError, match=r"inputSchema\.json.*must be an object"):
+        serialize(ts)
 
 
 def test_mixed_formats_are_rejected() -> None:
@@ -173,6 +238,13 @@ def test_detect_item_format_cases() -> None:
     assert detect_item_format({"name": "a", "inputSchema": {}, "parameters": {}}) is ToolFormat.MCP
     assert detect_item_format({"type": "function", "name": "a"}) is ToolFormat.OPENAI_RESPONSES
     assert detect_item_format({"type": "bash_20250124", "name": "bash"}) is None
+
+
+def test_bedrock_member_name_can_be_metadata_on_an_existing_tool() -> None:
+    items = [{"name": "read", "inputSchema": {}, "toolSpec": {"version": 1}}]
+    ts = parse(items)
+    assert ts.format is ToolFormat.MCP
+    assert serialize(ts) == items
 
 
 # --------------------------------------------------------------------------- io

@@ -14,10 +14,11 @@ import copy
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from itertools import groupby
 from typing import Any
 
 from toolism.errors import MissingExtraError, RuleError, ToolismError
-from toolism.models import ToolDef, ToolSet
+from toolism.models import ToolDef, ToolFormat, ToolSet
 from toolism.rules import Rule, Safety, all_rules, get_rule, resolve_options
 from toolism.tokenizers import HeuristicTokenizer, Tokenizer, _batch_counts, get_tokenizer
 from toolism.verify import Verdict, VerificationResult, check_equivalence, verify_available
@@ -386,7 +387,18 @@ def slim(
 
     final = tuple(current)
     for rule_cls in order_rules:
-        final = _apply_reorder(rule_cls, final, resolved[rule_cls.id])
+        if toolset.format is ToolFormat.BEDROCK and any(t.opaque for t in final):
+            # A cachePoint caches the preceding tools. Keep each run of functions
+            # on its own side of every Bedrock marker.
+            ordered: list[ToolDef] = []
+            for opaque, group in groupby(final, key=lambda t: t.opaque):
+                run = tuple(group)
+                if not opaque:
+                    run = _apply_reorder(rule_cls, run, resolved[rule_cls.id])
+                ordered.extend(run)
+            final = tuple(ordered)
+        else:
+            final = _apply_reorder(rule_cls, final, resolved[rule_cls.id])
 
     rule_stats = tuple(
         RuleStat(

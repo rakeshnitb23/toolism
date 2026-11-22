@@ -32,6 +32,7 @@ class _Layout:
     container: str | None  # None = fields live on the item itself
     schema_key: str
     template: Mapping[str, Any]  # skeleton used when an item is built from scratch
+    schema_container: str | None = None  # optional wrapper around schema_key
 
 
 _LAYOUTS: dict[ToolFormat, _Layout] = {
@@ -39,10 +40,18 @@ _LAYOUTS: dict[ToolFormat, _Layout] = {
     ToolFormat.OPENAI_RESPONSES: _Layout(None, "parameters", {"type": "function"}),
     ToolFormat.ANTHROPIC: _Layout(None, "input_schema", {}),
     ToolFormat.MCP: _Layout(None, "inputSchema", {}),
+    ToolFormat.BEDROCK: _Layout("toolSpec", "json", {"toolSpec": {}}, "inputSchema"),
 }
 
 # Places a tool list can live, in priority order.
-_LIST_PATHS: tuple[tuple[str, ...], ...] = (("tools",), ("result", "tools"), ("functions",))
+_BEDROCK_PATH = ("toolConfig", "tools")
+_LIST_PATHS: tuple[tuple[str, ...], ...] = (
+    ("tools",),
+    ("result", "tools"),
+    ("functions",),
+    _BEDROCK_PATH,
+)
+_BEDROCK_MEMBERS = {"toolSpec", "cachePoint", "systemTool"}
 
 
 def _locate(document: Any) -> tuple[tuple[str | int, ...], list[Any]]:
@@ -62,11 +71,17 @@ def _locate(document: Any) -> tuple[tuple[str | int, ...], list[Any]]:
     )
 
 
-def detect_item_format(item: Mapping[str, Any]) -> ToolFormat | None:
-    """Return the format of one tool item, or ``None`` for an opaque/built-in tool.
+def _bedrock_format(item: Mapping[str, Any]) -> ToolFormat:
+    # A Converse Tool is a union. Preserve extra fields, but require one known member.
+    members = _BEDROCK_MEMBERS.intersection(item)
+    if len(members) == 1 and isinstance(item[members.pop()], Mapping):
+        return ToolFormat.BEDROCK
+    raise FormatError(f"unrecognised tool item with keys {sorted(item)}")
 
-    Raises :class:`FormatError` when the item matches nothing.
-    """
+
+def _wire_format(item: Mapping[str, Any], path: tuple[str | int, ...] = ()) -> ToolFormat | None:
+    if path == _BEDROCK_PATH:
+        return _bedrock_format(item)
     function = item.get("function")
     if isinstance(function, Mapping) and "name" in function:
         return ToolFormat.OPENAI_CHAT
@@ -80,7 +95,18 @@ def detect_item_format(item: Mapping[str, Any]) -> ToolFormat | None:
         return None  # provider built-in (web_search, bash_..., file_search, ...)
     if "name" in item:
         return ToolFormat.OPENAI_RESPONSES  # legacy functions=[{name, description}]
+    if not path:
+        return _bedrock_format(item)
     raise FormatError(f"unrecognised tool item with keys {sorted(item)}")
+
+
+def detect_item_format(item: Mapping[str, Any]) -> ToolFormat | None:
+    """Return the format of one tool item, or ``None`` for an opaque/built-in tool.
+
+    Raises :class:`FormatError` when the item matches nothing.
+    """
+    fmt = _wire_format(item)
+    return None if fmt is ToolFormat.BEDROCK and "toolSpec" not in item else fmt
 
 
 def _fields(item: Mapping[str, Any], layout: _Layout) -> Mapping[str, Any]:
@@ -91,8 +117,17 @@ def _fields(item: Mapping[str, Any], layout: _Layout) -> Mapping[str, Any]:
     return inner
 
 
+def _bedrock_schema(schema: Any, name: str) -> Mapping[str, Any]:
+    if not isinstance(schema, Mapping):
+        raise FormatError(f"tool {name!r}: 'inputSchema.json' must be an object")
+    return schema
+
+
 def _to_tool(item: Mapping[str, Any], fmt: ToolFormat | None, index: int) -> ToolDef:
     source = copy.deepcopy(dict(item))
+    if fmt is ToolFormat.BEDROCK and "toolSpec" not in item:
+        member = "cachePoint" if "cachePoint" in item else "systemTool"
+        return ToolDef(name=member, opaque=True, source=source)
     if fmt is None:
         name = item.get("name") or item.get("type") or "<unnamed>"
         return ToolDef(name=str(name), opaque=True, source=source)
@@ -104,10 +139,16 @@ def _to_tool(item: Mapping[str, Any], fmt: ToolFormat | None, index: int) -> Too
     description = fields.get("description")
     if description is not None and not isinstance(description, str):
         raise FormatError(f"tool {name!r}: 'description' must be a string")
+    schema = fields.get(layout.schema_key)
+    if layout.schema_container is not None:
+        wrapper = fields.get(layout.schema_container)
+        schema = _bedrock_schema(
+            wrapper.get(layout.schema_key) if isinstance(wrapper, Mapping) else None, name
+        )
     return ToolDef(
         name=name,
         description=description,
-        input_schema=copy.deepcopy(fields.get(layout.schema_key)),
+        input_schema=copy.deepcopy(schema),
         strict=fields.get("strict") is True,
         source=source,
     )
@@ -163,16 +204,19 @@ def parse(document: Any) -> ToolSet:
     for index, item in enumerate(items):
         if not isinstance(item, Mapping):
             raise FormatError(f"tool at index {index} is not a JSON object")
-        formats.append(detect_item_format(item))
+        formats.append(_wire_format(item, path))
 
     seen: dict[ToolFormat, int] = {}
     for index, fmt in enumerate(formats):
         if fmt is not None:
             seen.setdefault(fmt, index)
+    if ToolFormat.BEDROCK in seen and None in formats:
+        raise FormatError("mixed tool formats in one list: Bedrock and a non-Bedrock built-in")
     if len(seen) > 1:
         described = ", ".join(f"{fmt} (first at index {i})" for fmt, i in seen.items())
         raise FormatError(f"mixed tool formats in one list: {described}")
-    toolset_format = next(iter(seen), ToolFormat.OPENAI_RESPONSES)
+    default = ToolFormat.BEDROCK if path == _BEDROCK_PATH else ToolFormat.OPENAI_RESPONSES
+    toolset_format = next(iter(seen), default)
 
     tools = tuple(
         _to_tool(item, fmt, i) for i, (item, fmt) in enumerate(zip(items, formats, strict=True))
@@ -197,6 +241,18 @@ def _patch(target: MutableMapping[str, Any], key: str, value: Any) -> None:
     target[key] = value
 
 
+def _writable_fields(
+    item: MutableMapping[str, Any], container: str | None
+) -> MutableMapping[str, Any]:
+    if container is None:
+        return item
+    inner = item.get(container)
+    if not isinstance(inner, MutableMapping):
+        inner = {}
+        item[container] = inner
+    return inner
+
+
 def _to_item(tool: ToolDef, fmt: ToolFormat) -> Any:
     if tool.opaque:
         return copy.deepcopy(dict(tool.source))
@@ -204,18 +260,15 @@ def _to_item(tool: ToolDef, fmt: ToolFormat) -> Any:
     item: dict[str, Any] = copy.deepcopy(dict(tool.source)) if tool.source else {}
     if not item:
         item = copy.deepcopy(dict(layout.template))
-    fields: MutableMapping[str, Any]
-    if layout.container is None:
-        fields = item
-    else:
-        inner = item.get(layout.container)
-        if not isinstance(inner, MutableMapping):
-            inner = {}
-            item[layout.container] = inner
-        fields = inner
+    fields = _writable_fields(item, layout.container)
     fields["name"] = tool.name
     _patch(fields, "description", tool.description)
-    _patch(fields, layout.schema_key, copy.deepcopy(tool.input_schema))
+    schema = tool.input_schema
+    if fmt is ToolFormat.BEDROCK:
+        schema = _bedrock_schema(schema, tool.name)
+    _patch(
+        _writable_fields(fields, layout.schema_container), layout.schema_key, copy.deepcopy(schema)
+    )
     if tool.strict and fields.get("strict") is not True:
         fields["strict"] = True
     return item

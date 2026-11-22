@@ -16,9 +16,9 @@ property name, `anyOf` wrappers for optional fields, `default: null`, `$schema` 
 `$defs`. toolism removes exactly that, proves or tests that the result accepts the same tool
 calls, and gives you a CI gate so the cost can't creep back up.
 
-On 14 tool sets (159 tools from 13 popular MCP servers, including the official reference servers,
-GitHub, Playwright, Notion, Context7 and AWS docs, plus one generated Pydantic server), the default safe rules cut tool-definition tokens by
-**37.4% in total, with a median of 11.3% per tool set**: 22% on the official git server, 34% on
+On 15 tool sets (192 tools from 14 popular MCP servers, including the official reference servers,
+GitHub, Playwright, Notion, Context7, Chrome DevTools and AWS docs, plus one generated Pydantic server), the default safe rules cut tool-definition tokens by
+**33.2% in total, with a median of 11.1% per tool set**: 22% on the official git server, 34% on
 a typical Pydantic-typed server, 73% on Notion (which copies the same nine `$defs` into all 24
 tools; 18 of them use none).
 Lean, hand-tuned schemas save almost nothing, and the [benchmark](https://github.com/rakeshnitb23/toolism/blob/master/bench/RESULTS.md) shows those
@@ -41,6 +41,7 @@ pip install toolism                 # CLI + Python API
 pip install "toolism[verify]"       # + equivalence verification (hypothesis-jsonschema)
 pip install "toolism[mcp]"          # + read tools straight from an MCP server
 pip install "toolism[all]"          # everything, incl. Anthropic's exact token counter
+pip install "toolism[gemini]"       # + Gemini's exact token counter
 ```
 
 Or run it without adding it to a project:
@@ -53,7 +54,8 @@ pipx install "toolism[mcp]"                       # isolated, always-on-PATH ins
 
 ## 30-second tour
 
-**Measure** what your tools cost (OpenAI, Anthropic and MCP JSON are detected automatically):
+**Measure** what your tools cost (OpenAI, Anthropic, MCP and Amazon Bedrock Converse JSON
+are detected automatically):
 
 ```console
 $ toolism measure examples/mcp_tools.json
@@ -85,6 +87,14 @@ Savings by rule
 │ SL005 │ description-whitespace │     −6 │     3 │
 │ SL006 │ echo-description       │    −17 │     1 │
 └───────┴────────────────────────┴────────┴───────┘
+```
+
+For Bedrock Converse, `converse.json` can contain a request with `toolConfig.tools` or just
+the tool list. toolism slims each schema at `toolSpec.inputSchema.json` and keeps
+`cachePoint` entries in their original positions.
+
+```console
+$ toolism slim converse.json -o converse.slim.json
 ```
 
 Point it at a live MCP server instead of a file with `--mcp`:
@@ -227,7 +237,7 @@ toolism.dump(result.toolset, "tools.slim.json")  # same format and envelope as t
 In an agent, slim once and send the slim tools with every request:
 
 ```python
-tools = toolism.slim_tools(my_tools)  # same shape back (OpenAI, Anthropic or MCP dicts)
+tools = toolism.slim_tools(my_tools)  # returns tools in the same format
 client.messages.create(model=..., tools=tools, messages=...)
 ```
 
@@ -328,6 +338,7 @@ The hook runs whenever a matching file is staged. Create the baseline once with
 | `tiktoken:o200k_base` (default) | OpenAI models; a good approximation elsewhere |
 | `heuristic` | offline, no dependencies; within ~3% of o200k on the benchmark |
 | `anthropic:<model>` | provider-reported counts from Anthropic's `count_tokens` API (needs `ANTHROPIC_API_KEY`) |
+| `gemini:<model>` | exact counts from Gemini's `count_tokens` API (needs `GEMINI_API_KEY`) |
 
 ### Persistent API count cache
 
@@ -408,8 +419,9 @@ outputs slightly, so if tool-call accuracy matters, compare on your evals. That 
 `--level annotations`.
 
 **Is tiktoken accurate for Claude or Gemini?** Not exactly, which is why reports say
-"approximate". Use `-t anthropic:<model>` for exact Claude counts. Relative savings are stable
-across tokenizers: within about 2 percentage points in the [benchmark](https://github.com/rakeshnitb23/toolism/blob/master/bench/RESULTS.md).
+"approximate". Use `-t anthropic:<model>` for exact Claude counts or `-t gemini:<model>` for
+Gemini. Relative savings are stable across tokenizers: within about 2 percentage points in the
+[benchmark](https://github.com/rakeshnitb23/toolism/blob/master/bench/RESULTS.md).
 
 **Which tool fields does toolism count?** It counts a compact, provider-neutral JSON
 rendering of each function tool's `name`, optional `description`, and input schema (rendered as

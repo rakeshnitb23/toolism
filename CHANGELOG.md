@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Amazon Bedrock Converse support for full requests and bare tool lists. `toolism slim`
+  rewrites `toolSpec.inputSchema.json` and preserves `cachePoint` entries (#142).
 - `toolism rules RULE`: show a single rule by ID or name, with full details and options.
 - `toolism doctor` reports local versions and optional dependencies for bug reports,
   without network requests or revealing API keys.
@@ -36,6 +38,13 @@ All notable changes to this project are documented here. The format follows
   deeper than 200 levels are now rejected at parse time as a `FormatError`,
   so the CLI prints a single input-error line and exits 2, and the Python
   API raises `FormatError`.
+
+### Gemini tokenizer
+
+- Gemini tool schemas now use the SDK's full JSON Schema field, allowing schemas with `$defs` and
+  `$ref` to pass SDK validation without a live API key.
+- The Gemini extra requires Python 3.11 or newer because `google-genai` 3.0.0, which adds full
+  JSON Schema support, no longer supports Python 3.10.
 
 ## [0.2.0] - 2026-10-31
 
