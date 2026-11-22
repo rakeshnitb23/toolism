@@ -13,7 +13,7 @@ from __future__ import annotations
 import copy
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import groupby
 from typing import Any
 
@@ -52,6 +52,8 @@ class ToolStat:
     name: str
     before: int
     after: int
+    rules: tuple[str, ...] = field(default=(), compare=False, repr=False)
+    """Content rules applied to this occurrence of the tool, in first-applied order."""
 
     @property
     def saved(self) -> int:
@@ -111,6 +113,8 @@ class SlimResult:
 
     toolset: ToolSet
     report: SlimReport
+    before_reorder: ToolSet | None = field(default=None, compare=False, repr=False)
+    """Slimmed content in input order when an ordering rule rearranged the tools."""
 
 
 def select_rules(
@@ -385,7 +389,8 @@ def slim(
                 f"schema that is not equivalent ({result.direction}); kept the other changes"
             )
 
-    final = tuple(current)
+    content = tuple(current)
+    final = content
     for rule_cls in order_rules:
         if toolset.format is ToolFormat.BEDROCK and any(t.opaque for t in final):
             # A cachePoint caches the preceding tools. Keep each run of functions
@@ -413,8 +418,13 @@ def slim(
     )
     with _batch_counts(reporting):
         tool_stats = tuple(
-            ToolStat(before.name, reporting.count_tool(before), reporting.count_tool(after))
-            for before, after in zip(original, current, strict=True)
+            ToolStat(
+                before.name,
+                reporting.count_tool(before),
+                reporting.count_tool(after),
+                tuple(touched.get(index, ())),
+            )
+            for index, (before, after) in enumerate(zip(original, current, strict=True))
             if not before.opaque
         )
         function_before = [t for t in original if not t.opaque]
@@ -435,4 +445,5 @@ def slim(
             rollbacks=tuple(rollbacks),
             verification=tuple(results),
         )
-    return SlimResult(toolset.replace_tools(final), report)
+    before_reorder = toolset.replace_tools(content) if final is not content else None
+    return SlimResult(toolset.replace_tools(final), report, before_reorder)

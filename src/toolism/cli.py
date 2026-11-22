@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import json
 import math
 import os
 import shutil
@@ -37,6 +38,11 @@ class OutputFormat(str, Enum):
     table = "table"
     json = "json"
     markdown = "markdown"
+
+
+class DiffFormat(str, Enum):
+    text = "text"
+    json = "json"
 
 
 class Level(str, Enum):
@@ -499,10 +505,13 @@ def diff(
         bool,
         typer.Option("--exit-code", help="Exit 1 if any tool would change, 0 otherwise."),
     ] = False,
+    fmt: Annotated[
+        DiffFormat, typer.Option("--format", "-f", help="Preview format.")
+    ] = DiffFormat.text,
 ) -> None:
-    """Preview per-tool changes as a unified diff; omit unchanged tools."""
+    """Preview per-tool changes as a unified diff or a JSON report."""
     from toolism.pipeline import slim as slim_toolset
-    from toolism.report import render_tool_diff
+    from toolism.report import diff_report_to_dict, render_tool_diff
     from toolism.rules import parse_option_assignment
 
     options: dict[str, dict[str, str]] = {}
@@ -519,13 +528,19 @@ def diff(
         tokenizer="heuristic",
     )
     _, color = _style(sys.stdout) if output is None else (DEFAULT_WIDTH, False)
-    rendered = render_tool_diff(toolset, result.toolset, color=color)
+    if fmt == DiffFormat.json:
+        report = diff_report_to_dict(toolset, result)
+        changed = any(tool["changed"] for tool in report["tools"])
+        rendered = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
+    else:
+        rendered = render_tool_diff(toolset, result.toolset, color=color)
+        changed = bool(rendered)
     _emit(rendered, output, color=color)
-    if not rendered:
+    if not changed:
         typer.echo("No changes.", err=True)
     for warning in result.report.warnings:
         typer.echo(f"Warning: {warning}", err=True)
-    if exit_code and rendered:
+    if exit_code and changed:
         raise typer.Exit(EXIT_FAILED)
 
 

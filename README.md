@@ -147,13 +147,16 @@ tools = await load_mcp_http_async(url, timeout=60)
 
 ```bash
 toolism diff examples/mcp_tools.json
+toolism diff examples/mcp_tools.json -f json -o tools.diff.json
 toolism diff examples/mcp_tools.json --level annotations -o tools.diff
 toolism diff --mcp "python my_server.py" --mcp-timeout 30
 toolism diff examples/mcp_tools.json --exit-code  # exits 1 if changes found (CI)
 ```
 
 The preview shows normalized JSON for each tool's name, description and input schema.
-Unchanged tools are omitted; a tool-order change alone produces no diff. `--level`,
+The default text output omits unchanged tools. JSON includes each function tool with
+its before/after counts and the rules that changed it. Both formats ignore tool-order
+changes when deciding whether a tool changed. `--level`,
 `--enable`, `--disable` and `--option` select the same rewrites as `slim`. The preview runs
 locally without a reporting-tokenizer call. Use `-` for stdin, `--output` to write a file,
 and `--exit-code` to exit 1 when differences are found.
@@ -371,7 +374,7 @@ Persistence is disabled by default. Use a trusted cache directory; see the
 for setup, limits and security details.
 
 For machine-readable reports, see [JSON output](https://github.com/rakeshnitb23/toolism/blob/master/docs/json-output.md): `measure -f json`,
-`slim -r json`, and `check -f json` share the versioned `toolism_report: 1` format.
+`slim -r json`, `diff -f json`, and `check -f json` share the versioned `toolism_report: 1` format.
 
 The default tokenizer downloads its vocabulary file (a few MB) once on first use. Offline, behind
 a proxy that blocks it, or in locked-down CI, use `-t heuristic`, or download it once and point

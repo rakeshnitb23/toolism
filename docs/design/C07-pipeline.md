@@ -8,7 +8,7 @@ Select rules, apply them to a fixpoint, attribute savings, verify and roll back,
 
 ```python
 @dataclass(frozen=True) class RuleStat: rule_id: str; name: str; tokens_saved: int; tools_changed: tuple[str, ...]
-@dataclass(frozen=True) class ToolStat: name: str; before: int; after: int
+@dataclass(frozen=True) class ToolStat: name: str; before: int; after: int; rules: tuple[str, ...] = ()
 @dataclass(frozen=True) class Rollback: tool: str; rules: tuple[str, ...]; direction: str; example: Any
 @dataclass(frozen=True) class SlimReport:
     tokenizer: str; approximate: bool; attribution_tokenizer: str
@@ -17,7 +17,7 @@ Select rules, apply them to a fixpoint, attribute savings, verify and roll back,
     passes: int; warnings: tuple[str, ...]; rollbacks: tuple[Rollback, ...]
     verification: tuple[VerificationResult, ...]   # empty unless verify=True
     @property saved -> int; @property saved_pct -> float
-@dataclass(frozen=True) class SlimResult: toolset: ToolSet; report: SlimReport
+@dataclass(frozen=True) class SlimResult: toolset: ToolSet; report: SlimReport; before_reorder: ToolSet | None = None
 
 def select_rules(level: Safety | str = "safe", enable=(), disable=()) -> list[Rule]
 def slim(toolset, *, level="safe", enable=(), disable=(), options=None, tokenizer=None,

@@ -712,8 +712,9 @@ def test_diff_live_mcp_matches_file_and_writes_output(runner: CliRunner, tmp_pat
     assert "create_contact" in expected.stdout
 
 
+@pytest.mark.parametrize("fmt", [(), ("--format", "text")], ids=["default", "explicit-text"])
 def test_diff_changed_tool_and_unchanged_file(
-    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fmt: tuple[str, ...]
 ) -> None:
     source = tmp_path / "tools.json"
     original = json.dumps(
@@ -727,7 +728,7 @@ def test_diff_changed_tool_and_unchanged_file(
     source.write_text(original, encoding="utf-8")
     # A preview must not consult the user's possibly remote reporting tokenizer.
     monkeypatch.setenv("TOOLISM_TOKENIZER", "not-a-tokenizer")
-    result = invoke(runner, "diff", source)
+    result = invoke(runner, "diff", source, *fmt)
     assert result.exit_code == 0, result.output
     assert result.stderr == ""
     assert result.stdout == (
@@ -852,12 +853,32 @@ def test_diff_shows_description_only_cleanup(runner: CliRunner) -> None:
     assert '+  "description": "Search.",' in result.stdout
 
 
-def test_diff_does_not_confuse_tool_reordering_with_schema_changes(runner: CliRunner) -> None:
+@pytest.mark.parametrize("fmt", ["text", "json"])
+def test_diff_does_not_confuse_tool_reordering_with_schema_changes(
+    runner: CliRunner, fmt: str
+) -> None:
     document = [{"name": name, "inputSchema": {"type": "object"}} for name in ("z", "a")]
-    result = invoke(runner, "diff", "-", "--enable", "SL007", input=json.dumps(document))
+    result = invoke(
+        runner,
+        "diff",
+        "-",
+        "-f",
+        fmt,
+        "--exit-code",
+        "--enable",
+        "SL007",
+        input=json.dumps(document),
+    )
     assert result.exit_code == 0, result.output
-    assert result.stdout == ""
     assert result.stderr == "No changes.\n"
+    if fmt == "json":
+        rows = json.loads(result.stdout)["tools"]
+        assert [(r["name"], r["changed"], r["rules"]) for r in rows] == [
+            ("z", False, []),
+            ("a", False, []),
+        ]
+    else:
+        assert result.stdout == ""
 
 
 def test_diff_retains_duplicate_occurrences_when_tools_are_reordered(runner: CliRunner) -> None:
@@ -898,6 +919,25 @@ def test_diff_writes_output_file(runner: CliRunner, bloated: Path, tmp_path: Pat
     assert result.exit_code == 0, result.output
     assert result.stdout == result.stderr == ""
     assert target.read_text(encoding="utf-8").startswith('--- "create_issue" (before)\n')
+
+
+def test_diff_json_exit_code_still_writes_report(
+    runner: CliRunner, bloated: Path, tmp_path: Path
+) -> None:
+    preview = invoke(runner, "diff", bloated, "-f", "json")
+    assert preview.exit_code == 0, preview.output
+    assert preview.stderr == ""
+    report = json.loads(preview.stdout)
+    assert (report["toolism_report"], report["kind"]) == (1, "diff")
+    assert [(r["name"], r["changed"]) for r in report["tools"]] == [
+        ("create_issue", True),
+        ("ping", False),
+    ]
+    target = tmp_path / "diff.json"
+    checked = invoke(runner, "diff", bloated, "--format", "json", "--exit-code", "-o", target)
+    assert checked.exit_code == 1
+    assert checked.stdout == checked.stderr == ""
+    assert target.read_text(encoding="utf-8") == preview.stdout
 
 
 def test_diff_replaces_stale_output_with_empty_result(runner: CliRunner, tmp_path: Path) -> None:
