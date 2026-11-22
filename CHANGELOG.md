@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `toolism diff --mcp-url URL` previews tools from a streamable-HTTP MCP server (#201).
 - Streamable-HTTP MCP loading with `--mcp-url URL` on `measure`, `slim` and `check`,
   plus `load_mcp_http` and its async variant. Includes bounded pagination, the shared
   MCP timeout and connection-error hints; live and file inputs are mutually exclusive.

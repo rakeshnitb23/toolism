@@ -200,11 +200,12 @@ toolism doctor
 
 toolism diff    [SOURCE] [--level safe|annotations] [--enable ID]... [--disable ID]...
                         [--option ID.key=value]... [--output FILE] [--exit-code]
-                        [--mcp COMMAND] [--mcp-timeout SECONDS]
+                        [--mcp COMMAND] [--mcp-url URL] [--mcp-timeout SECONDS]
 ```
 
-`measure`, `slim`, `diff` and `check` take `--mcp COMMAND` and `--mcp-timeout SECONDS` in place of
-`SOURCE`; `measure`, `slim` and `check` also take `--mcp-url URL`. `toolism --help` and `toolism <command> --help` are the authoritative reference.
+`measure`, `slim`, `diff` and `check` accept `--mcp COMMAND` or `--mcp-url URL` in place of
+`SOURCE`. `--mcp-timeout SECONDS` applies to either live input. `toolism --help` and
+`toolism <command> --help` are the authoritative reference.
 
 `doctor` reports Python, OS, toolism and installed dependency versions, plus whether
 `ANTHROPIC_API_KEY` is set. It uses local package metadata without importing optional SDKs,
