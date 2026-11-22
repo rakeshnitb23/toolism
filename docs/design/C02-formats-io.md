@@ -27,9 +27,13 @@ Checked in order:
 2. Object with `"tools"` array → `("tools",)`. Covers MCP `tools/list` results and request bodies such as `{"model":…, "tools":[…]}`.
 3. JSON-RPC response `{"result":{"tools":[…]}}` → `("result","tools")`.
 4. Object with `"functions"` array (legacy OpenAI) → `("functions",)`.
-5. Otherwise `FormatError("no tool list found …")`.
+5. Bedrock Converse request `{"toolConfig":{"tools":[…]}}` → `("toolConfig","tools")`.
+6. Otherwise `FormatError("no tool list found …")`.
 
 ## Item format detection
+
+A Converse request identifies the format through `toolConfig.tools`. Each item must carry
+one of `toolSpec`, `cachePoint` or `systemTool`. The table gives the detection order for other inputs.
 
 | Condition | Format |
 |---|---|
@@ -38,10 +42,14 @@ Checked in order:
 | has `"input_schema"` | ANTHROPIC |
 | has `"name"` and `"parameters"` (or `"type":"function"` + `"name"`) | OPENAI_RESPONSES |
 | has `"type"` but none of the above (e.g. `web_search_preview`, `bash_20250124`) | opaque |
-| otherwise | `FormatError` with the item index |
+| has `"name"` only or with other metadata | OPENAI_RESPONSES (legacy function) |
+| bare list item with a Bedrock `toolSpec` object | BEDROCK |
+| bare list item with a Bedrock `cachePoint` or `systemTool` object | opaque (BEDROCK) |
+| otherwise | `FormatError` listing the item's keys |
 
 - All non-opaque items must share one format, otherwise `FormatError` naming both formats and indices.
-- An all-opaque set gets OPENAI_RESPONSES as a label; nothing will be rewritten.
+- Bedrock markers retain the BEDROCK format even in a list with no `toolSpec`. Other
+  all-opaque sets get OPENAI_RESPONSES as a label.
 
 **Field mapping** (read from and write back to the same place):
 
@@ -51,6 +59,7 @@ Checked in order:
 | OPENAI_RESPONSES | `name` | `description` | `parameters` | `strict` |
 | ANTHROPIC | `name` | `description` | `input_schema` | `strict` |
 | MCP | `name` | `description` | `inputSchema` | — |
+| BEDROCK | `toolSpec.name` | `toolSpec.description` | `toolSpec.inputSchema.json` | `toolSpec.strict` |
 
 ## Serialization
 
