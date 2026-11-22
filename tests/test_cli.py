@@ -1121,7 +1121,9 @@ def test_measure_mcp_config_exits_2_when_no_server_is_measured(
     )
 
 
-@pytest.mark.parametrize("extra", [("tools.json",), ("--mcp", "server")])
+@pytest.mark.parametrize(
+    "extra", [("tools.json",), ("--mcp", "server"), ("--mcp-url", "http://127.0.0.1:1/mcp")]
+)
 def test_measure_mcp_config_rejects_other_inputs_before_starting_anything(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: tuple[str, ...]
 ) -> None:
@@ -1129,7 +1131,7 @@ def test_measure_mcp_config_rejects_other_inputs_before_starting_anything(
     config = _config(tmp_path, {"a": {"command": "a"}})
     result = invoke(runner, "measure", "--mcp-config", config, *extra)
     assert result.exit_code == 2
-    assert result.stderr == "error: give only one of SOURCE, --mcp or --mcp-config\n"
+    assert result.stderr == "error: give only one of SOURCE, --mcp, --mcp-url or --mcp-config\n"
     assert started == []
 
 
