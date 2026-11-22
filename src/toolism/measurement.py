@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from toolism.models import ToolDef, ToolSet
-from toolism.tokenizers import Tokenizer, get_tokenizer
+from toolism.tokenizers import Tokenizer, _batch_counts, get_tokenizer
 
 __all__ = ["SourceCount", "SourcesReport", "TokenReport", "ToolCount", "measure", "measure_sources"]
 
@@ -41,15 +41,16 @@ def measure(toolset: ToolSet, tokenizer: str | Tokenizer | None = None) -> Token
     """Measure every non-opaque tool with ``tokenizer`` (default: ``tiktoken:o200k_base``)."""
     counter = get_tokenizer(tokenizer)
     function_tools = toolset.function_tools()
-    return TokenReport(
-        tokenizer=counter.name,
-        approximate=counter.approximate,
-        total=counter.count_tools(function_tools),
-        tool_count=len(function_tools),
-        tools=tuple(ToolCount(t.name, counter.count_tool(t)) for t in function_tools),
-        uncounted=tuple(t.name for t in toolset.tools if t.opaque),
-        warnings=toolset.warnings,
-    )
+    with _batch_counts(counter):
+        return TokenReport(
+            tokenizer=counter.name,
+            approximate=counter.approximate,
+            total=counter.count_tools(function_tools),
+            tool_count=len(function_tools),
+            tools=tuple(ToolCount(t.name, counter.count_tool(t)) for t in function_tools),
+            uncounted=tuple(t.name for t in toolset.tools if t.opaque),
+            warnings=toolset.warnings,
+        )
 
 
 @dataclass(frozen=True)

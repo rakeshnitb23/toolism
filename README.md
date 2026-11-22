@@ -24,6 +24,16 @@ tools; 18 of them use none).
 Lean, hand-tuned schemas save almost nothing, and the [benchmark](https://github.com/rakeshnitb23/toolism/blob/master/bench/RESULTS.md) shows those
 too.
 
+## Demo
+
+<p align="center">
+  <a href="https://github.com/rakeshnitb23/toolism/blob/master/.github/assets/toolism-demo.mp4">
+    <img src="https://raw.githubusercontent.com/rakeshnitb23/toolism/master/.github/assets/toolism-demo-poster.jpg" alt="toolism demo video: measure and safely cut the token cost of LLM tool and MCP schemas (click to play)" width="640">
+  </a>
+  <br>
+  <sub>48-second walkthrough, with sound. Click to play.</sub>
+</p>
+
 ## Install
 
 ```bash
