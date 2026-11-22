@@ -101,7 +101,7 @@ models, errors         (bottom: no internal deps)
 | C9 | Measure & report | `measure.py`, `report.py` | `TokenReport`, `SourcesReport`, `SlimReport`; renderers: rich table, JSON (versioned), Markdown |
 | C10 | Check | `check.py` | Baseline file, budgets, comparison → `CheckResult`, exit codes |
 | C11 | CLI | `cli.py` | `toolism measure / slim / diff / check / rules` |
-| C12 | MCP loader | `loaders/mcp.py`, `loaders/mcp_config.py` | Launch an MCP server over stdio and page through `tools/list` (extra: `mcp`); read an MCP client config's `mcpServers` and load each server |
+| C12 | MCP loader | `loaders/mcp.py`, `loaders/mcp_config.py` | Connect to an MCP server over stdio or streamable HTTP and page through `tools/list` (extra: `mcp`); read an MCP client config's `mcpServers` and load each server |
 | C13 | GitHub Action & CI | `action.yml`, `.github/workflows/*` | Composite Action wrapping `toolism check`; CI matrix; release via PyPI trusted publishing |
 | C14 | Benchmark | `bench/` | Snapshots of public MCP servers + Pydantic-style schemas; results across tokenizers |
 | C15 | Docs | `README.md`, `CONTRIBUTING.md`, `docs/` | Quickstart, rule catalogue, contributor guide |
@@ -173,6 +173,7 @@ toolism.loads(text)                                # parse a JSON string
 toolism.serialize(result.toolset)                  # back to a JSON-ready document in the input's format
 toolism.slim_tools(list_of_dicts) -> list[dict]    # one-liner for agent code
 toolism.load_mcp_stdio("npx -y @scope/server")     # tools from a live stdio MCP server (extra: mcp)
+toolism.load_mcp_http("http://127.0.0.1:8000/mcp") # tools from a streamable-HTTP MCP endpoint
 toolism.list_rules()
 ```
 
@@ -203,14 +204,15 @@ toolism diff    [SOURCE] [--level safe|annotations] [--enable ID]... [--disable 
 ```
 
 `measure`, `slim`, `diff` and `check` take `--mcp COMMAND` and `--mcp-timeout SECONDS` in place of
-`SOURCE`. `toolism --help` and `toolism <command> --help` are the authoritative reference.
+`SOURCE`; `measure`, `slim` and `check` also take `--mcp-url URL`. `toolism --help` and `toolism <command> --help` are the authoritative reference.
 
 `doctor` reports Python, OS, toolism and installed dependency versions, plus whether
 `ANTHROPIC_API_KEY` is set. It uses local package metadata without importing optional SDKs,
 making network requests or printing credentials. Missing extras are diagnostic information,
 not an error.
 
-- `SOURCE` is a JSON file, `-` for stdin, or `--mcp "<command>"` for a live stdio server.
+- Give one input: a JSON file, `-` for stdin, `--mcp "<command>"` for a live stdio server,
+  or `--mcp-url URL` for a streamable-HTTP endpoint.
 - `measure --mcp-config FILE` reads the `mcpServers` object of an MCP client config and starts each stdio server in turn (`--mcp-timeout` applies per server). It reports one row per server and a total counted over all their tools as one list. Remote (`url`) and `"disabled": true` entries are skipped; a failing server is reported and the rest still run. It exits `0` when at least one server was measured and `2` when none could be.
 - `rules RULE` accepts a rule ID or name and shows its full description, safety and options.
   Omitting `RULE` keeps the summary listing; JSON and Markdown retain their existing format.
@@ -257,7 +259,7 @@ See [ARCHITECTURE_REVIEW.md](ARCHITECTURE_REVIEW.md) for the reasoning behind ea
 
 ## 14. Security and privacy
 
-- toolism makes **no network calls** of its own, except when the user picks `anthropic:*` (sends definitions to Anthropic) or `--mcp` (runs a local command they supplied, which may itself use the network, e.g. `npx`).
+- toolism makes **no network calls** of its own, except when the user picks `anthropic:*` (sends definitions to Anthropic), `--mcp-url` (initializes and lists tools at the supplied endpoint), or `--mcp` (runs a local command they supplied, which may itself use the network, e.g. `npx`).
 - The default `tiktoken:*` tokenizers download their vocabulary file once, on first use, and cache it (`TIKTOKEN_CACHE_DIR`). Tool definitions never leave the machine. Fully offline: `-t heuristic`.
 - `bench/servers.toml` runs commands. It's a developer tool, never read by the library or CLI.
 

@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     )
     from toolism.formats import parse, serialize
     from toolism.io import dump, dumps, load, loads
-    from toolism.loaders.mcp import load_mcp_stdio
+    from toolism.loaders.mcp import load_mcp_http, load_mcp_stdio
     from toolism.measurement import TokenReport, measure
     from toolism.models import ToolDef, ToolFormat, ToolSet
     from toolism.pipeline import SlimReport, SlimResult, slim
@@ -60,6 +60,7 @@ __all__ = [
     "dumps",
     "list_rules",
     "load",
+    "load_mcp_http",
     "load_mcp_stdio",
     "loads",
     "measure",
@@ -83,6 +84,7 @@ _LAZY = {
     "dump": "toolism.io",
     "dumps": "toolism.io",
     "load": "toolism.io",
+    "load_mcp_http": "toolism.loaders.mcp",
     "loads": "toolism.io",
     "load_mcp_stdio": "toolism.loaders.mcp",
     "TokenReport": "toolism.measurement",
