@@ -154,8 +154,10 @@ uv run pytest -m slow tests/test_bench.py      # your rule on 159 real tools
 uv run toolism rules -f markdown -o docs/rules.md   # a test fails if this is stale
 ```
 
-Then add a line under `## [Unreleased]` in `CHANGELOG.md`, and if the rule saves tokens on the
-corpus, rerun `uv run python bench/run.py` and commit `bench/RESULTS.md` and `results.json`.
+Then add a changelog fragment (see `changelog.d/README.md`): one file named
+after the issue or PR number, not an edit to `CHANGELOG.md` directly. And if
+the rule saves tokens on the corpus, rerun `uv run python bench/run.py` and
+commit `bench/RESULTS.md` and `results.json`.
 
 ## Ideas to work on
 
@@ -181,7 +183,7 @@ Each of these makes a good first issue:
 
 - Use [Conventional Commits](https://www.conventionalcommits.org/): `feat(rules): …`,
   `fix(cli): …`, `docs: …`, `test: …`, `ci: …`.
-- Keep one logical change per pull request, with tests. Behaviour changes need a CHANGELOG line.
+- Keep one logical change per pull request, with tests. Behaviour changes need a changelog fragment in `changelog.d/` (never a direct `CHANGELOG.md` edit; see `changelog.d/README.md`).
 - Changing the public API (anything in `toolism.__all__`, a CLI option, an exit code, an Action
   input or output) follows the [stability policy](README.md#stability): add the new behaviour,
   keep the old one working with a `DeprecationWarning` for at least one minor release, and list
@@ -191,7 +193,9 @@ Each of these makes a good first issue:
 ## Releasing (maintainers)
 
 1. Open a pull request (`master` is protected) that sets `__version__` in
-   `src/toolism/__about__.py`; updates `version` and `date-released` in `CITATION.cff`; moves the
+   `src/toolism/__about__.py`; updates `version` and `date-released` in `CITATION.cff`; folds
+   changelog fragments into `CHANGELOG.md` (`python3 .github/scripts/changelog_fragments.py fold`,
+   which deletes the fragment files) and moves the
    CHANGELOG's `Unreleased` section under the new version with a short `Highlights` list, and
    updates the compare links at the end of `CHANGELOG.md`; updates the version in the README's
    Action and pre-commit examples and the [cache example](docs/token-cache.md); and regenerates the

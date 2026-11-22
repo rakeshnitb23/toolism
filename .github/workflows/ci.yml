@@ -38,6 +38,22 @@ jobs:
       - name: Spell check with typos
         uses: crate-ci/typos@v1.52.0
 
+  changelog-guard:
+    name: changelog guard
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Direct CHANGELOG.md edits must use fragments
+        run: |
+          if [[ "${{ github.head_ref }}" == release/* ]]; then exit 0; fi
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD | grep -qx "CHANGELOG.md"; then
+            echo "::error::Edit changelog.d/<number>.md instead of CHANGELOG.md (see changelog.d/README.md). Release branches are exempt."
+            exit 1
+          fi
+
   types:
     runs-on: ubuntu-latest
     steps:
