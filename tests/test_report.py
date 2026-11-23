@@ -240,6 +240,8 @@ def test_sources_report_dict_and_json() -> None:
     assert data["sources"][1]["tool_count"] == 1
     assert data["not_measured"] == [{"name": "x", "reason": "why"}]
     assert json.loads(render_sources_report(report, "json")) == data
+    assert "cost" not in data
+    assert all("cost" not in s for s in data["sources"])
 
 
 def test_sources_report_table_and_markdown() -> None:
@@ -256,6 +258,43 @@ def test_sources_report_table_and_markdown() -> None:
     assert "| Server | Tools | Tokens | % of total |" in md
     assert "| `github` | 2 |" in md
     assert f"| **Total** | **3** | **{report.total:,}** |  |" in md
+    assert "Cost" not in table
+    assert "Cost" not in md
+
+
+@pytest.mark.parametrize("fmt", ["table", "markdown", "json"])
+def test_sources_report_price_estimate(fmt: str) -> None:
+    report = measure_sources([("github", TOOLS), ("local", SMALL)], H)
+    original = render_sources_report(report, fmt)  # type: ignore[arg-type]
+    priced = render_sources_report(report, fmt, price=3000.0)  # type: ignore[arg-type]
+
+    if fmt == "json":
+        data = json.loads(priced)
+        original_data = json.loads(original)
+
+        assert data["cost"]["usd_per_million_input_tokens"] == 3000.0
+        assert data["cost"]["usd_per_1000_requests"] == pytest.approx(
+            report.total * 3000.0 / 1000
+        )
+
+        for source, source_report in zip(data["sources"], report.sources):
+            assert source["cost"]["usd_per_million_input_tokens"] == 3000.0
+            assert source["cost"]["usd_per_1000_requests"] == pytest.approx(
+                source_report.tokens * 3000.0 / 1000
+            )
+
+        for source in data["sources"]:
+            source.pop("cost")
+        data.pop("cost")
+
+        assert data == original_data
+    else:
+        assert "Cost" in priced
+        assert priced != original
+        assert "At $3,000.00 per million input tokens:" in priced
+
+        if fmt == "markdown":
+            assert "| Server | Tools | Tokens | % of total | Cost |" in priced
 
 
 class _PerListTokenizer:
