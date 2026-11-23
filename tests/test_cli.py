@@ -1107,7 +1107,6 @@ def test_measure_mcp_config_reports_each_server_and_the_total(
     assert "4 tools from 2 of 4 servers" in table.stdout
 
 
-
 @pytest.mark.parametrize("fmt", ["table", "markdown", "json"])
 def test_measure_mcp_config_with_price(
     runner: CliRunner,
@@ -1142,7 +1141,6 @@ def test_measure_mcp_config_with_price(
         assert "Cost" in result.stdout
         assert "At $3,000.00 per million input tokens:" in result.stdout
         assert "per 1,000 requests" in result.stdout
-
 
 
 def test_measure_mcp_config_exits_2_when_no_server_is_measured(

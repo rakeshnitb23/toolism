@@ -340,7 +340,7 @@ def _measure_mcp_config(
     output: Path | None,
     width: int,
     color: bool,
-    price: float | None = None
+    price: float | None = None,
 ) -> None:
     from toolism.loaders.mcp_config import load_mcp_config
     from toolism.measurement import measure_sources

@@ -273,11 +273,13 @@ def test_sources_report_price_estimate(fmt: str) -> None:
         original_data = json.loads(original)
 
         assert data["cost"]["usd_per_million_input_tokens"] == 3000.0
-        assert data["cost"]["usd_per_1000_requests"] == pytest.approx(
-            report.total * 3000.0 / 1000
-        )
+        assert data["cost"]["usd_per_1000_requests"] == pytest.approx(report.total * 3000.0 / 1000)
 
-        for source, source_report in zip(data["sources"], report.sources):
+        for source, source_report in zip(
+            data["sources"],
+            report.sources,
+            strict=True,
+        ):
             assert source["cost"]["usd_per_million_input_tokens"] == 3000.0
             assert source["cost"]["usd_per_1000_requests"] == pytest.approx(
                 source_report.tokens * 3000.0 / 1000

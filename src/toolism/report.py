@@ -192,36 +192,33 @@ def sources_report_to_dict(
             }
             for s in report.sources
         ],
-        "not_measured": [
-            {"name": name, "reason": reason}
-            for name, reason in report.not_measured
-        ],
+        "not_measured": [{"name": name, "reason": reason} for name, reason in report.not_measured],
         "uncounted": list(report.uncounted),
         "warnings": list(report.warnings),
     }
 
     if price is not None:
         for source in result["sources"]:
-            source["cost"] = _cost(
-                source["tokens"], price
-            )
-        result["cost"] = _cost(
-            result["total_tokens"], price
-        )
+            source["cost"] = _cost(source["tokens"], price)
+        result["cost"] = _cost(result["total_tokens"], price)
 
     return result
 
+
 def render_sources_report(
-    report: SourcesReport, 
-    fmt: Format = "table", 
-    *, 
-    width: int = 100, 
+    report: SourcesReport,
+    fmt: Format = "table",
+    *,
+    width: int = 100,
     color: bool = False,
-    price: float | None = None
+    price: float | None = None,
 ) -> str:
     """One row per source plus a total row, for ``measure --mcp-config``."""
     if fmt == "json":
-        return json.dumps(sources_report_to_dict(report, price=price), indent=2, ensure_ascii=False) + "\n"
+        return (
+            json.dumps(sources_report_to_dict(report, price=price), indent=2, ensure_ascii=False)
+            + "\n"
+        )
     ranked = sorted(report.sources, key=lambda s: (-s.tokens, s.name))
     summary = (
         f"{_n(report.total)} tokens across {report.tool_count} tools from "
@@ -232,17 +229,17 @@ def render_sources_report(
     notes += [f"Not measured: {name}: {reason}" for name, reason in report.not_measured]
     if report.uncounted:
         notes.append(f"Not counted (provider built-ins): {', '.join(report.uncounted)}")
-    
+
     if price is not None:
         cost = _cost(report.total, price)
         notes.append(
             f"At {_usd(price)} per million input tokens: "
             f"{_usd(cost['usd_per_1000_requests'])} per 1,000 requests"
         )
-    
+
     total_cells = ["Total", str(report.tool_count), _n(report.total), ""]
     if price is not None:
-        total_cells.append(_usd(cost['usd_per_1000_requests']))
+        total_cells.append(_usd(cost["usd_per_1000_requests"]))
 
     if fmt == "markdown":
         rows = []
@@ -254,9 +251,7 @@ def render_sources_report(
                 f"{_pct(s.tokens, report.total):.1f}%",
             ]
             if price is not None:
-                cells.append(
-                    _usd(_cost(s.tokens, price)["usd_per_1000_requests"])
-                )
+                cells.append(_usd(_cost(s.tokens, price)["usd_per_1000_requests"]))
             rows.append(cells)
         markdown_total_cells = [
             "**Total**",
@@ -266,9 +261,7 @@ def render_sources_report(
         ]
 
         if price is not None:
-            markdown_total_cells.append(
-                f"**{_usd(cost['usd_per_1000_requests'])}**"
-            )
+            markdown_total_cells.append(f"**{_usd(cost['usd_per_1000_requests'])}**")
 
         rows.append(markdown_total_cells)
 
@@ -278,13 +271,13 @@ def render_sources_report(
         if price is not None:
             headers.append("Cost")
             alignment += "r"
-        
+
         parts = [
             "### toolism — tool definition tokens by server",
             "",
             summary,
             "",
-            _md_table(headers, rows, alignment)
+            _md_table(headers, rows, alignment),
         ]
 
         parts += ["", *notes] if notes else []
@@ -298,14 +291,9 @@ def render_sources_report(
     if price is not None:
         table.add_column("Cost", justify="right")
     for s in ranked:
-        cells = [
-            s.name, 
-            str(s.tool_count), 
-            _n(s.tokens), 
-            f"{_pct(s.tokens, report.total):.1f}%"
-        ]
+        cells = [s.name, str(s.tool_count), _n(s.tokens), f"{_pct(s.tokens, report.total):.1f}%"]
         if price is not None:
-            cells.append(_usd(_cost(s.tokens, price)['usd_per_1000_requests']))
+            cells.append(_usd(_cost(s.tokens, price)["usd_per_1000_requests"]))
         table.add_row(*cells)
     table.add_section()
     table.add_row(*total_cells)
