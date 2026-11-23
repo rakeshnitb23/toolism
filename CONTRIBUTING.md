@@ -159,23 +159,11 @@ corpus, rerun `uv run python bench/run.py` and commit `bench/RESULTS.md` and `re
 
 ## Ideas to work on
 
-Each of these makes a good first issue:
+Choose one of the issues below or check here for more opportunities:
 
-- **SL002, hoisting type-specific keywords.**
-  `anyOf: [{type: string, format: date}, {type: null}]` is equivalent to
-  `{type: [string, null], format: date}`, because `format`, `pattern`, `minLength` and
-  `maxLength` only constrain strings. The Python SDK emits this for every `date | None`.
-- **Single-branch `allOf`.** `allOf: [X]` → `X`, when the sibling keywords don't conflict.
-- **SL104 `dedupe-descriptions` (lossy).** Drop property descriptions repeated verbatim in the
-  tool description.
-- **Gemini tokenizer.** `gemini:<model>` using the `count_tokens` API, mirroring
-  `tokenizers/anthropic_tokenizer.py`.
-- **More formats.** Gemini function declarations; LangChain and LlamaIndex tool exports.
-- **HTTP MCP servers.** A loader for streamable-HTTP servers (`--mcp-url`).
-- **`toolism diff`.** Show per-tool schema diffs of what slimming changed.
-- **More benchmark servers.** Add an entry to `bench/servers.toml`, then run
-  `uv run python bench/collect.py <name>` and `bench/run.py`. See the
-  [benchmark workflow](bench/README.md) for details.
+[good first issues](https://github.com/rakeshnitb23/toolism/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22) | [help wanted](https://github.com/rakeshnitb23/toolism/issues?q=is%3Aissue+state%3Aopen+label%3A%22help+wanted%22)
+
+- **More formats.** Gemini function declarations ([#29](https://github.com/rakeshnitb23/toolism/issues/29)); LangChain and LlamaIndex tool exports ([#86](https://github.com/rakeshnitb23/toolism/issues/86)).
 
 ## Commits and pull requests
 
