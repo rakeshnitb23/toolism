@@ -174,7 +174,7 @@ def render_token_report(
 
 def sources_report_to_dict(
     report: SourcesReport,
-    price: float | None,
+    price: float | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
         "toolism_report": REPORT_VERSION,
