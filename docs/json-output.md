@@ -88,7 +88,7 @@ wrapping, caching, other input tokens, and output tokens are not included.
 reports one entry per server instead of one per tool:
 
 ```sh
-toolism measure --mcp-config ~/.cursor/mcp.json -f json
+toolism measure --mcp-config ~/.cursor/mcp.json --price 3 -f json
 ```
 
 Example (abridged):
@@ -101,18 +101,30 @@ Example (abridged):
   "approximate": true,
   "total_tokens": 4210,
   "tool_count": 31,
+  "cost": {
+    "usd_per_million_input_tokens": 3.0,
+    "usd_per_1000_requests": 12.63
+  },
   "sources": [
     {
       "name": "github",
       "tokens": 3650,
       "tool_count": 26,
-      "percent": 86.7
+      "percent": 86.7,
+      "cost": {
+        "usd_per_million_input_tokens": 3.0,
+        "usd_per_1000_requests": 10.95
+      }
     },
     {
       "name": "filesystem",
       "tokens": 560,
       "tool_count": 5,
-      "percent": 13.3
+      "percent": 13.3,
+      "cost": {
+        "usd_per_million_input_tokens": 3.0,
+        "usd_per_1000_requests": 1.68
+      }
     }
   ],
   "not_measured": [
@@ -135,7 +147,8 @@ Top-level fields:
 | `tokenizer`, `approximate` | As in `measure`. |
 | `total_tokens` | All the servers' tools counted as one list, the way the model receives them. With `anthropic:` tokenizers it also holds the once-per-request tool overhead, so it can be more than the sum of the `sources` counts. |
 | `tool_count` | Number of tools counted, across all servers. |
-| `sources` | One entry per measured server, in config order: `name`, `tokens` (the sum of its tools' costs, as in `measure`), `tool_count`, `percent` (share of `total_tokens`). |
+| `cost` | Estimated cost for all counted tool-definition tokens. Contains `usd_per_million_input_tokens` (the supplied price) and `usd_per_1000_requests` (`total_tokens / 1000 * price`). Present only when `--price` is specified. |
+| `sources` | One entry per measured server, in config order: `name`, `tokens` (the sum of its tools' token costs, as in `measure`), `tool_count`, `percent` (share of `total_tokens`), and optionally `cost` (estimated cost for that server's tool-definition tokens, with the same fields as the top-level `cost` object). |
 | `not_measured` | Servers that were skipped or failed: `name`, `reason`. The reason never includes the server's command line, and `env` and argument values of 3 or more characters are masked. |
 | `uncounted` | Provider built-ins that were not counted, as `"<server>: <tool>"`. |
 | `warnings` | Non-fatal warnings, such as a tool name used by several servers. |
