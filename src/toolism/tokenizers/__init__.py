@@ -10,6 +10,7 @@ from toolism.tokenizers.anthropic_tokenizer import AnthropicTokenizer
 from toolism.tokenizers.base import TextTokenizer, Tokenizer
 from toolism.tokenizers.gemini_tokenizer import GeminiTokenizer
 from toolism.tokenizers.heuristic import HeuristicTokenizer
+from toolism.tokenizers.huggingface_tokenizer import HuggingFaceTokenizer
 from toolism.tokenizers.tiktoken_tokenizer import TiktokenTokenizer
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "AnthropicTokenizer",
     "GeminiTokenizer",
     "HeuristicTokenizer",
+    "HuggingFaceTokenizer",
     "TextTokenizer",
     "TiktokenTokenizer",
     "Tokenizer",
@@ -26,7 +28,10 @@ __all__ = [
 
 DEFAULT_TOKENIZER = "tiktoken:o200k_base"
 ENV_VAR = "TOOLISM_TOKENIZER"
-_FORMS = "use 'heuristic', 'tiktoken:<encoding>', 'anthropic:<model>' or 'gemini:<model>'"
+_FORMS = (
+    "use 'heuristic', 'tiktoken:<encoding>', 'anthropic:<model>', "
+    "'gemini:<model>' or 'huggingface:<repo>'"
+)
 
 
 def _batch_counts(counter: Tokenizer) -> AbstractContextManager[None]:
@@ -62,4 +67,11 @@ def get_tokenizer(spec: str | Tokenizer | None = None) -> Tokenizer:
                 "the gemini tokenizer needs a model", hint="e.g. gemini:gemini-2.5-flash"
             )
         return GeminiTokenizer(argument)
+    if kind == "huggingface":
+        if not argument.strip():
+            raise TokenizerError(
+                "the huggingface tokenizer needs a model repository",
+                hint="e.g. huggingface:Qwen/Qwen2.5-7B-Instruct",
+            )
+        return HuggingFaceTokenizer(argument)
     raise TokenizerError(f"unknown tokenizer {text!r}", hint=_FORMS)
