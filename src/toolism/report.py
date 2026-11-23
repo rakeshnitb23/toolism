@@ -201,14 +201,13 @@ def sources_report_to_dict(
     }
 
     if price is not None:
-        result["price"] = price
         for source in result["sources"]:
             source["cost"] = _cost(
                 source["tokens"], price
-            )["usd_per_1000_requests"]
+            )
         result["cost"] = _cost(
             result["total_tokens"], price
-        )["usd_per_1000_requests"]
+        )
 
     return result
 
