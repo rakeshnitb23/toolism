@@ -114,11 +114,14 @@ $ toolism measure --mcp-config ~/.cursor/mcp.json
 
 `--mcp-config` reads the `mcpServers` object of a client config such as
 `claude_desktop_config.json`, `.cursor/mcp.json` or a Claude Code `.mcp.json`, and starts each
-stdio server in turn with its `command`, `args` and `env`. `--mcp-timeout` applies to each server.
-The total counts all the servers' tools as one list, the way the model receives them. Remote
-(`url`) and disabled entries are skipped, and a server that fails is listed without stopping the
-rest. It exits 0 when at least one server was measured and 2 when none could be. `env` values
-are passed as written, so `${VAR}` placeholders are not expanded.
+stdio server in turn with its `command`, `args` and `env`, or connects to a streamable-HTTP
+endpoint given as a `url` alone or with `type` set to `http`, `streamable-http`, or
+`streamableHttp`. Only use configs whose commands and endpoints you trust.
+`--mcp-timeout` applies to each server. The total counts all their tools as one list, the way
+the model receives them. Disabled entries, legacy `sse`, and remote entries with `headers` or
+credentials in the URL's authority are skipped. A failing server is listed without stopping the
+rest. It exits 0 when at least one server was measured and 2 when none could be. Stdio `env`
+values are passed as written, so `${VAR}` placeholders are not expanded.
 
 For a streamable-HTTP MCP endpoint, use `--mcp-url` on `measure`, `slim` or `check`:
 

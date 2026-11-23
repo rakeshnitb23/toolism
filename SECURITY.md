@@ -22,12 +22,16 @@ Only the latest release receives security fixes.
 - **`--mcp-url URL` connects to that HTTP endpoint** to initialize an MCP session and list
   tools. It does not execute tools or configure OAuth/authentication headers. Use an endpoint
   you intend to contact; remote definitions are handled as data, like tool definition files.
-- **`--mcp-config FILE` starts every stdio server listed in that file**, each the way `--mcp`
-  would, with that entry's `command`, `args` and `env` added to your environment. Only point it
-  at a config whose servers you would run anyway. toolism never prints `env` values: a failing
-  server is reported by its name, without its command line, and any `env` or argument value of
-  3 or more characters is masked if the server's error repeats it. With `TOOLISM_DEBUG=1` the
-  servers' own stderr is passed through unfiltered.
+- **`--mcp-config FILE` starts listed stdio servers and contacts supported HTTP endpoints.**
+  Only use a config whose servers you intend to run or contact. Stdio entries run like `--mcp`,
+  inheriting the process environment with the entry's `env` overlaid. A failing stdio server is
+  reported by name without its command line; environment and argument values of 3 or more
+  characters are masked if the error repeats them. `TOOLISM_DEBUG=1` passes stdio stderr through
+  unfiltered. For config HTTP entries, legacy SSE, any `headers` field and URL username/password
+  credentials are unsupported and skipped. Otherwise the endpoint receives the URL as written.
+  Config HTTP failures do not display the URL or raw server error, and toolism suppresses the
+  SDK transport and session logs, HTTP request logs, and low-level HTTP traces for these entries
+  even in debug mode.
 - **`anthropic:<model>` tokenization** sends the tool definitions to Anthropic's `count_tokens`
   API using your `ANTHROPIC_API_KEY`. The `heuristic` and `tiktoken:*` tokenizers count locally;
   tiktoken downloads its vocabulary file once on first use (set `TIKTOKEN_CACHE_DIR` to control

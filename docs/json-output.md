@@ -118,7 +118,7 @@ Example (abridged):
   "not_measured": [
     {
       "name": "linear",
-      "reason": "skipped: remote server (url); only stdio servers are supported"
+      "reason": "skipped: HTTP headers are not supported (see #146)"
     }
   ],
   "uncounted": [],

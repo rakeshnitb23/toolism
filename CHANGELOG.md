@@ -21,7 +21,7 @@ All notable changes to this project are documented here. The format follows
 - `toolism measure --mcp-config FILE` measures every stdio server in an MCP client config
   (`claude_desktop_config.json`, `.cursor/mcp.json`, `.mcp.json`) and reports one row per server
   plus a total over all their tools. A failing server is reported without stopping the others;
-  remote and disabled entries are skipped. Failure reasons leave out the server's command line
+  disabled entries are skipped. Failure reasons leave out the server's command line
   and mask `env` and argument values. JSON output uses the new `measure_sources` report kind.
   (#141)
 - `gemini:<model>` tokenizer: exact counts from Gemini's `count_tokens` API, installed with
@@ -30,6 +30,10 @@ All notable changes to this project are documented here. The format follows
   `$ref` work (#28).
 
 ### Changed
+
+- `toolism measure --mcp-config FILE` also measures headerless streamable-HTTP entries.
+  Legacy SSE and entries with headers are skipped with different reasons; HTTP failure
+  diagnostics omit URLs and raw remote errors (#203).
 
 - Batch persistent Anthropic count-cache writes during `measure` and `slim`, with periodic
   checkpoints and a final flush, while preserving immediate writes for standalone tokenizer

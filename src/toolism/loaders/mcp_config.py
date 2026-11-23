@@ -4,10 +4,10 @@ Claude Desktop, Cursor, Claude Code and others list their servers in the same sh
 
     {"mcpServers": {"github": {"command": "npx", "args": ["-y", "..."], "env": {"TOKEN": "..."}}}}
 
-Each stdio server is started with :func:`toolism.loaders.mcp.load_mcp_stdio`. Remote servers
-(``url``) and entries marked ``"disabled": true`` are skipped, and one server failing does not
-stop the others. Failure reasons leave out the server's command line and mask its ``env``
-and argument values.
+Stdio and headerless streamable-HTTP servers are measured in file order. Disabled entries,
+legacy SSE and remote entries with headers are skipped. One server failing does not stop the
+others. Stdio errors mask command arguments and environment values; HTTP errors omit endpoint
+URLs and remote error details.
 """
 
 from __future__ import annotations
@@ -19,13 +19,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from toolism.errors import FormatError, LoaderError
 from toolism.models import ToolSet
 
 __all__ = ["ConfigServer", "load_mcp_config", "read_mcp_config"]
 
-_REMOTE_TYPES = frozenset({"http", "sse", "streamable-http", "streamableHttp"})
+_HTTP_TYPES = frozenset({"http", "streamable-http", "streamableHttp"})
 _MIN_MASKED = 3  # "1" or "-y" would mask ordinary text; any real secret is longer
 
 
@@ -37,6 +38,7 @@ class ConfigServer:
     argv: tuple[str, ...] = ()
     env: Mapping[str, str] = field(default_factory=dict, repr=False)
     skip: str | None = None
+    url: str | None = field(default=None, repr=False)
 
 
 def _string_list(value: Any) -> list[str] | None:
@@ -45,16 +47,42 @@ def _string_list(value: Any) -> list[str] | None:
     return None
 
 
+def _http_server(name: str, entry: dict[str, Any], kind: str | None) -> ConfigServer:
+    if "headers" in entry:
+        return ConfigServer(name, skip="HTTP headers are not supported (see #146)")
+    if kind is not None and kind not in _HTTP_TYPES:
+        return ConfigServer(name, skip="unsupported transport for a 'url' entry")
+    if "command" in entry and "url" in entry:
+        return ConfigServer(name, skip="entry cannot specify both 'command' and 'url'")
+    url = entry.get("url")
+    if not isinstance(url, str) or not url.strip():
+        return ConfigServer(name, skip="streamable HTTP needs a non-empty 'url' string")
+    try:
+        parts = urlsplit(url)
+        valid = parts.scheme in {"http", "https"} and bool(parts.hostname)
+        # Reading port validates its syntax and range.
+        _ = parts.port
+    except ValueError:
+        valid = False
+    if not valid:
+        return ConfigServer(name, skip="'url' must be an HTTP(S) URL with a host")
+    if parts.username is not None or parts.password is not None:
+        return ConfigServer(name, skip="HTTP URL credentials are not supported (see #146)")
+    return ConfigServer(name, url=url)
+
+
 def _server(name: str, entry: Any) -> ConfigServer:
     if not isinstance(entry, dict):
         return ConfigServer(name, skip="not a JSON object")
     if entry.get("disabled") is True:
         return ConfigServer(name, skip="disabled")
-    kind = entry.get("type", "stdio")
-    if not isinstance(kind, str):
+    kind = entry.get("type")
+    if "type" in entry and not isinstance(kind, str):
         return ConfigServer(name, skip="'type' must be a string")
-    if "url" in entry or kind in _REMOTE_TYPES:
-        return ConfigServer(name, skip="remote server (url); only stdio servers are supported")
+    if kind == "sse":
+        return ConfigServer(name, skip="legacy SSE transport is not supported; use streamable HTTP")
+    if "url" in entry or kind in _HTTP_TYPES:
+        return _http_server(name, entry, kind)
     command = entry.get("command")
     if not isinstance(command, str) or not command.strip():
         return ConfigServer(name, skip="no 'command' to start it with")
@@ -116,12 +144,12 @@ def read_mcp_config(path: str | os.PathLike[str]) -> tuple[ConfigServer, ...]:
 def load_mcp_config(
     path: str | os.PathLike[str], *, timeout: float = 60.0
 ) -> tuple[list[tuple[str, ToolSet]], list[tuple[str, str]]]:
-    """Start every stdio server in the config, one at a time, and list its tools.
+    """List each configured server's tools, one server at a time.
 
     Returns ``(loaded, not_measured)``: ``(name, toolset)`` for each server that answered, and
     ``(name, reason)`` for each one that was skipped or failed. ``timeout`` applies per server.
     """
-    from toolism.loaders.mcp import load_mcp_stdio
+    from toolism.loaders.mcp import _load_config_http, load_mcp_stdio
 
     servers = read_mcp_config(path)
     loaded: list[tuple[str, ToolSet]] = []
@@ -131,9 +159,12 @@ def load_mcp_config(
             not_measured.append((server.name, f"skipped: {server.skip}"))
             continue
         try:
-            loaded.append(
-                (server.name, load_mcp_stdio(list(server.argv), env=server.env, timeout=timeout))
-            )
+            if server.url is None:
+                tools = load_mcp_stdio(list(server.argv), env=server.env, timeout=timeout)
+            else:
+                tools = _load_config_http(server.url, timeout=timeout)
+            loaded.append((server.name, tools))
         except (LoaderError, FormatError) as exc:  # a missing mcp extra still stops the run
-            not_measured.append((server.name, _reason(exc, server)))
+            reason = _reason(exc, server) if server.url is None else exc.message
+            not_measured.append((server.name, reason))
     return loaded, not_measured

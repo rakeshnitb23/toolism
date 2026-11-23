@@ -291,8 +291,8 @@ def measure(
             "--mcp-config",
             metavar="FILE",
             help=(
-                "Start every stdio server in an MCP client config (claude_desktop_config.json, "
-                ".cursor/mcp.json, .mcp.json) and report each one plus the total."
+                "Measure stdio and headerless streamable-HTTP servers in an MCP client config "
+                "and report each one plus the total."
             ),
             show_default=False,
         ),

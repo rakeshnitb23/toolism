@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import shlex
 import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
+from typer.testing import CliRunner
 
+from servers.http_server import serve_http
+from toolism import cli
 from toolism.errors import FormatError, LoaderError, MissingExtraError
 from toolism.formats import parse
 from toolism.loaders import mcp_config
@@ -53,15 +57,32 @@ def test_read_stdio_servers_in_file_order(tmp_path: Path) -> None:
     assert "secret-value" not in repr(servers[0])
 
 
+@pytest.mark.parametrize("kind", [None, "http", "streamable-http", "streamableHttp"])
+def test_read_accepts_only_supported_http_forms(tmp_path: Path, kind: str | None) -> None:
+    url = "http://127.0.0.1:1/mcp?token=synthetic-config-secret"
+    entry = {"url": url} if kind is None else {"type": kind, "url": url}
+    path = _write(tmp_path, {"mcpServers": {"remote": entry}})
+    (server,) = mcp_config.read_mcp_config(path)
+    assert server.skip is None
+    assert server.url == url
+    assert url not in repr(server)
+
+
 @pytest.mark.parametrize(
     ("entry", "reason"),
     [
         ({"command": "npx", "disabled": True}, "disabled"),
-        ({"url": "https://example.com/mcp"}, "remote server"),
-        ({"type": "http", "url": "https://example.com/mcp"}, "remote server"),
-        ({"type": "sse"}, "remote server"),
-        ({"url": "https://example.com/mcp", "command": "npx"}, "remote server"),
-        ({"type": "http", "command": "npx"}, "remote server"),
+        ({"type": "sse"}, "legacy SSE"),
+        ({"url": "http://127.0.0.1:1/mcp", "command": "npx"}, "both"),
+        ({"type": "http"}, "'url'"),
+        ({"type": "http", "command": "npx"}, "needs a non-empty 'url'"),
+        ({"url": ""}, "'url'"),
+        ({"url": "file:///tmp/not-http"}, "HTTP(S)"),
+        ({"url": "http://synthetic-user:synthetic-pass@127.0.0.1:1/mcp"}, "credentials"),
+        ({"type": "stdio", "url": "http://127.0.0.1:1/mcp"}, "transport"),
+        ({"type": "unknown", "url": "http://127.0.0.1:1/mcp"}, "transport"),
+        ({"url": "http://127.0.0.1:1/mcp", "headers": {}}, "#146"),
+        ({"type": "http", "url": "http://127.0.0.1:1/mcp", "headers": None}, "#146"),
         ({"type": [], "command": "npx"}, "'type' must be a string"),
         ({"args": ["x"]}, "no 'command'"),
         ({"command": "  "}, "no 'command'"),
@@ -216,3 +237,112 @@ def test_load_live_servers_from_a_config(tmp_path: Path) -> None:
     assert [t.name for t in loaded[0][1].tools] == ["create_contact", "search_contacts"]
     assert [name for name, _ in not_measured] == ["missing"]
     assert not_measured[0][1].startswith("failed: command not found")
+
+
+@pytest.mark.mcp
+def test_measure_mixed_config_keeps_going_after_http_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pytest.importorskip("mcp")
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    with (
+        serve_http(mode="http_error") as broken,
+        serve_http(sse=True) as good,
+        serve_http() as skipped,
+    ):
+        # Neither the URL path nor an event-stream response implies legacy SSE.
+        good_url = good.url.removesuffix("/mcp") + "/sse"
+        path = _write(
+            tmp_path,
+            {
+                "mcpServers": {
+                    "broken": {"url": f"{broken.url}?token=synthetic-failure-secret"},
+                    "local": {"command": sys.executable, "args": [str(DEMO)]},
+                    "legacy": {"type": "sse", "url": skipped.url},
+                    "private": {"url": skipped.url, "headers": {"X-Test": "synthetic-secret"}},
+                    "working": {"url": good_url},
+                }
+            },
+        )
+        result = CliRunner().invoke(
+            cli.app, ["measure", "--mcp-config", str(path), "-t", "heuristic", "-f", "json"]
+        )
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert [s["name"] for s in data["sources"]] == ["local", "working"]
+    assert data["tool_count"] == 4
+    assert [row["name"] for row in data["not_measured"]] == ["broken", "legacy", "private"]
+    assert data["not_measured"][0]["reason"].startswith("failed:")
+    assert "legacy SSE" in data["not_measured"][1]["reason"]
+    assert "#146" in data["not_measured"][2]["reason"]
+    assert broken.requests
+    assert good.terminated
+    assert not skipped.requests
+    assert "synthetic-secret" not in result.output
+    assert "synthetic-failure-secret" not in result.output
+
+
+@pytest.mark.mcp
+def test_http_config_deadline_and_diagnostics_do_not_echo_urls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    pytest.importorskip("mcp")
+    monkeypatch.setenv("TOOLISM_DEBUG", "1")
+    caplog.set_level(logging.DEBUG, logger="mcp.client.streamable_http")
+    caplog.set_level(logging.INFO, logger="httpx")
+    caplog.set_level(logging.INFO, logger="httpx2")
+    with serve_http(delay="tools/list") as endpoint:
+        url = f"{endpoint.url}?token=synthetic-query-secret"
+        path = _write(tmp_path, {"mcpServers": {"remote": {"url": url}}})
+        loaded, rows = mcp_config.load_mcp_config(path, timeout=0.25)
+    assert not loaded
+    assert rows == [("remote", "failed: timed out after 0.25s")]
+    assert any(r["method"] == "tools/list" for r in endpoint.requests)
+    assert "synthetic-query-secret" not in repr(rows) + caplog.text
+
+
+def test_http_config_propagates_missing_sdk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _write(tmp_path, {"mcpServers": {"remote": {"url": "http://127.0.0.1:1/mcp"}}})
+
+    def missing(url: str, **_: Any) -> ToolSet:
+        raise MissingExtraError("Loading tools from an MCP server", "mcp")
+
+    monkeypatch.setattr("toolism.loaders.mcp.load_mcp_http", missing)
+    with pytest.raises(MissingExtraError):
+        mcp_config.load_mcp_config(path)
+
+
+@pytest.mark.parametrize(
+    "logger_name",
+    [
+        "httpx",
+        "httpx2",
+        "httpcore.http11",
+        "httpcore2.http11",
+        "mcp.client.session",
+        "mcp.shared.session",
+    ],
+)
+def test_http_config_redacts_session_and_request_logs_only_during_discovery(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    logger_name: str,
+) -> None:
+    logger = logging.getLogger(logger_name)
+    caplog.set_level(logging.WARNING, logger=logger_name)
+    path = _write(tmp_path, {"mcpServers": {"remote": {"url": "http://127.0.0.1:1/mcp"}}})
+
+    def fails(url: str, **_: Any) -> ToolSet:
+        logger.warning("synthetic-remote-diagnostic")
+        raise LoaderError("synthetic-remote-error")
+
+    monkeypatch.setattr("toolism.loaders.mcp.load_mcp_http", fails)
+    loaded, rows = mcp_config.load_mcp_config(path)
+    logger.warning("unrelated diagnostic after discovery")
+    assert not loaded
+    assert rows == [("remote", "failed: streamable HTTP connection or tool discovery failed")]
+    assert "synthetic-remote-diagnostic" not in caplog.text
+    assert "unrelated diagnostic after discovery" in caplog.text
