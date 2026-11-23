@@ -95,7 +95,6 @@ Example (abridged):
 
 ```json
 {
-  "price": 3.0,
   "toolism_report": 1,
   "kind": "measure_sources",
   "tokenizer": "tiktoken:o200k_base",
@@ -107,18 +106,15 @@ Example (abridged):
       "name": "github",
       "tokens": 3650,
       "tool_count": 26,
-      "percent": 86.7,
-      "cost": 10.95
+      "percent": 86.7
     },
     {
       "name": "filesystem",
       "tokens": 560,
       "tool_count": 5,
-      "percent": 13.3,
-      "cost": 1.68
+      "percent": 13.3
     }
   ],
-  "cost": 12.63,
   "not_measured": [
     {
       "name": "linear",
