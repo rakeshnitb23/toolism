@@ -1085,7 +1085,7 @@ def test_measure_mcp_config_reports_each_server_and_the_total(
         {
             "github": {"command": "github", "env": {"GITHUB_TOKEN": "secret-value"}},
             "broken": {"command": "broken"},
-            "remote": {"url": "https://example.com/mcp"},
+            "remote": {"type": "sse", "url": "http://127.0.0.1:1/mcp"},
             "files": {"command": "files"},
         },
     )

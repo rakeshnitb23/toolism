@@ -17,7 +17,7 @@ from contextvars import ContextVar
 from dataclasses import replace
 from typing import IO, Any
 
-from toolism.errors import LoaderError, MissingExtraError
+from toolism.errors import FormatError, LoaderError, MissingExtraError
 from toolism.formats import parse
 from toolism.models import ToolFormat, ToolSet
 
@@ -256,7 +256,7 @@ async def load_mcp_http_async(url: str, *, timeout: float = 60.0) -> ToolSet:
     client_session, transport, types = _import_mcp_http()
     logger = logging.getLogger("mcp.client.streamable_http")
     log_filter = _HttpLogFilter()
-    token = _QUIET_HTTP_LOGS.set(not bool(os.environ.get("TOOLISM_DEBUG")))
+    token = _QUIET_HTTP_LOGS.set(_QUIET_HTTP_LOGS.get() or not os.environ.get("TOOLISM_DEBUG"))
     logger.addFilter(log_filter)
     try:
         with anyio.fail_after(timeout):
@@ -294,3 +294,33 @@ def load_mcp_http(url: str, *, timeout: float = 60.0) -> ToolSet:
         return await load_mcp_http_async(url, timeout=timeout)
 
     return anyio.run(run)
+
+
+def _load_config_http(url: str, *, timeout: float) -> ToolSet:
+    """Use the HTTP discovery path without printing URL or remote error text from a config."""
+    # The SDK transport honors this context. The HTTP clients in SDK 1.x and
+    # 2.x can independently log the URL when an embedding app enables HTTP logs.
+    token = _QUIET_HTTP_LOGS.set(True)
+    logger_names = ("httpx", "httpx2", "mcp.client.session", "mcp.shared.session")
+    # Logger filters are not inherited by child loggers. The protocol
+    # loggers may trace response headers, so filter their exact names too.
+    core_loggers = (
+        f"{prefix}.{name}"
+        for prefix in ("httpcore", "httpcore2")
+        for name in ("connection", "http11", "http2", "proxy", "socks")
+    )
+    http_loggers = tuple(logging.getLogger(name) for name in (*logger_names, *core_loggers))
+    log_filter = _HttpLogFilter()
+    for logger in http_loggers:
+        logger.addFilter(log_filter)
+    try:
+        return load_mcp_http(url, timeout=timeout)
+    except (LoaderError, FormatError) as exc:
+        if exc.__cause__ is not None and isinstance(_leaf(exc.__cause__), TimeoutError):
+            raise LoaderError(f"failed: timed out after {timeout:g}s") from None
+        # The server may echo credentials or return secrets we cannot enumerate.
+        raise LoaderError("failed: streamable HTTP connection or tool discovery failed") from None
+    finally:
+        for logger in http_loggers:
+            logger.removeFilter(log_filter)
+        _QUIET_HTTP_LOGS.reset(token)

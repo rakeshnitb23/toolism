@@ -213,7 +213,7 @@ not an error.
 
 - Give one input: a JSON file, `-` for stdin, `--mcp "<command>"` for a live stdio server,
   or `--mcp-url URL` for a streamable-HTTP endpoint.
-- `measure --mcp-config FILE` reads the `mcpServers` object of an MCP client config and starts each stdio server in turn (`--mcp-timeout` applies per server). It reports one row per server and a total counted over all their tools as one list. Remote (`url`) and `"disabled": true` entries are skipped; a failing server is reported and the rest still run. It exits `0` when at least one server was measured and `2` when none could be.
+- `measure --mcp-config FILE` reads an MCP client config's `mcpServers` object and lists tools from stdio and headerless streamable HTTP in turn (`--mcp-timeout` applies per server). It reports one row per server and a total counted over all their tools as one list. Disabled, legacy SSE and header-bearing remote entries are skipped; a failing server is reported and the rest still run. It exits `0` when at least one server was measured and `2` when none could be.
 - `rules RULE` accepts a rule ID or name and shows its full description, safety and options.
   Omitting `RULE` keeps the summary listing; JSON and Markdown retain their existing format.
 - **Exit codes:**
