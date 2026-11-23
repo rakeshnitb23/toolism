@@ -42,6 +42,7 @@ pip install "toolism[verify]"       # + equivalence verification (hypothesis-jso
 pip install "toolism[mcp]"          # + read tools straight from an MCP server
 pip install "toolism[all]"          # everything, incl. Anthropic's exact token counter
 pip install "toolism[gemini]"       # + Gemini's exact token counter
+pip install "toolism[huggingface]"  # + local model tokenizers from the Hugging Face Hub
 ```
 
 Or run it without adding it to a project:
@@ -362,6 +363,12 @@ The hook runs whenever a matching file is staged. Create the baseline once with
 | `heuristic` | offline, no dependencies; within ~3% of o200k on the benchmark |
 | `anthropic:<model>` | provider-reported counts from Anthropic's `count_tokens` API (needs `ANTHROPIC_API_KEY`) |
 | `gemini:<model>` | exact counts from Gemini's `count_tokens` API (needs `GEMINI_API_KEY`) |
+| `huggingface:<repo>` | local token counts with a public model's `tokenizer.json`; approximate |
+
+For example, run `toolism measure examples/mcp_tools.json -t huggingface:Qwen/Qwen2.5-7B-Instruct`.
+This downloads only `tokenizer.json`, not model weights. It uses Hugging Face's cache and does
+not send an authentication token. Set `HF_HUB_OFFLINE=1` to use only cached files. The counts
+exclude the model's chat template and special-token wrapping, so reports remain approximate.
 
 ### Persistent API count cache
 

@@ -6,7 +6,16 @@ import json
 import subprocess
 import sys
 
-HEAVY = ["tiktoken", "hypothesis", "hypothesis_jsonschema", "jsonschema", "mcp", "anthropic"]
+HEAVY = [
+    "tiktoken",
+    "hypothesis",
+    "hypothesis_jsonschema",
+    "jsonschema",
+    "mcp",
+    "anthropic",
+    "tokenizers",
+    "huggingface_hub",
+]
 
 
 def test_import_does_not_load_heavy_dependencies() -> None:

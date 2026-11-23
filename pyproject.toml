@@ -39,7 +39,8 @@ verify = ["hypothesis>=6.100", "hypothesis-jsonschema>=0.23", "jsonschema>=4.21"
 mcp = ["mcp>=1.2"]
 anthropic = ["anthropic>=0.40"]
 gemini = ["google-genai>=3.0.0; python_version >= '3.11'"]
-all = ["toolism[verify,mcp,anthropic,gemini]"]
+huggingface = ["tokenizers>=0.22,<1", "huggingface-hub>=0.34,<3"]
+all = ["toolism[verify,mcp,anthropic,gemini,huggingface]"]
 
 [project.scripts]
 toolism = "toolism.cli:main"

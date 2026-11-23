@@ -219,7 +219,8 @@ TokenizerOpt = Annotated[
         "-t",
         metavar="NAME",
         help=(
-            "heuristic, tiktoken:<encoding> or anthropic:<model>. "
+            "heuristic, tiktoken:<encoding>, anthropic:<model>, gemini:<model> or "
+            "huggingface:<repo>. "
             "Default: $TOOLISM_TOKENIZER, else tiktoken:o200k_base."
         ),
         show_default=False,

@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `-t huggingface:<repo>` counts rendered tool definitions using a public model's
+  Hugging Face tokenizer, without downloading model weights or applying its chat template (#143).
+
 - Streamable-HTTP MCP loading with `--mcp-url URL` on `measure`, `slim` and `check`,
   plus `load_mcp_http` and its async variant. Includes bounded pagination, the shared
   MCP timeout and connection-error hints; live and file inputs are mutually exclusive.
