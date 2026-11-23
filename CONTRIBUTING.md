@@ -160,13 +160,10 @@ corpus, rerun `uv run python bench/run.py` and commit `bench/RESULTS.md` and `re
 ## Ideas to work on
 
 Choose one of the issues below or check here for more opportunities:
-[good first issues](https://github.com/rakeshnitb23/toolism/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22) | [help wanted](https://github.com/rakeshnitb23/toolism/issues?q=is%3Aissue+state%3Aopen+label%3A%22help+wanted%22)
-**Comment on an issue** to claim it before starting.
 
-- **Gemini tokenizer.** ([#28](https://github.com/rakeshnitb23/toolism/issues/28)) `gemini:<model>` using the `count_tokens` API, mirroring
-  `tokenizers/anthropic_tokenizer.py`.
+[good first issues](https://github.com/rakeshnitb23/toolism/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22) | [help wanted](https://github.com/rakeshnitb23/toolism/issues?q=is%3Aissue+state%3Aopen+label%3A%22help+wanted%22)
+
 - **More formats.** Gemini function declarations ([#29](https://github.com/rakeshnitb23/toolism/issues/29)); LangChain and LlamaIndex tool exports ([#86](https://github.com/rakeshnitb23/toolism/issues/86)).
-- **HTTP MCP servers.** ([#31](https://github.com/rakeshnitb23/toolism/issues/31)) A loader for streamable-HTTP servers (`--mcp-url`).
 - **More benchmark servers.** ([#27](https://github.com/rakeshnitb23/toolism/issues/27)) Add an entry to `bench/servers.toml`, then run
   `uv run python bench/collect.py <name>` and `bench/run.py`. See the
   [benchmark workflow](bench/README.md) for details.
