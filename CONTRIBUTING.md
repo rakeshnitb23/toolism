@@ -164,9 +164,6 @@ Choose one of the issues below or check here for more opportunities:
 [good first issues](https://github.com/rakeshnitb23/toolism/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22) | [help wanted](https://github.com/rakeshnitb23/toolism/issues?q=is%3Aissue+state%3Aopen+label%3A%22help+wanted%22)
 
 - **More formats.** Gemini function declarations ([#29](https://github.com/rakeshnitb23/toolism/issues/29)); LangChain and LlamaIndex tool exports ([#86](https://github.com/rakeshnitb23/toolism/issues/86)).
-- **More benchmark servers.** ([#27](https://github.com/rakeshnitb23/toolism/issues/27)) Add an entry to `bench/servers.toml`, then run
-  `uv run python bench/collect.py <name>` and `bench/run.py`. See the
-  [benchmark workflow](bench/README.md) for details.
 
 ## Commits and pull requests
 
