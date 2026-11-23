@@ -258,6 +258,19 @@ def render_sources_report(
                     _usd(_cost(s.tokens, price)["usd_per_1000_requests"])
                 )
             rows.append(cells)
+        markdown_total_cells = [
+            "**Total**",
+            f"**{report.tool_count}**",
+            f"**{_n(report.total)}**",
+            "",
+        ]
+
+        if price is not None:
+            markdown_total_cells.append(
+                f"**{_usd(cost['usd_per_1000_requests'])}**"
+            )
+
+        rows.append(markdown_total_cells)
 
         headers = ["Server", "Tools", "Tokens", "% of total"]
         alignment = "lrrr"

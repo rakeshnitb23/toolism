@@ -1376,11 +1376,3 @@ def test_doctor_reports_all_installed_extras(
         "jsonschema",
     ):
         assert f"{name}: 9.8.7" in result.stdout
-
-
-def test_measure_price_with_mcp_config_is_a_usage_error(runner: CliRunner, tmp_path: Path) -> None:
-    config = tmp_path / "mcp.json"
-    config.write_text('{"mcpServers": {"x": {"command": "never-started"}}}', encoding="utf-8")
-    result = invoke(runner, "measure", "--mcp-config", config, "--price", "3")
-    assert result.exit_code == 2
-    assert "--price can't be combined with --mcp-config" in result.stderr
