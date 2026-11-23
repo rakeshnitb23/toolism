@@ -1107,6 +1107,42 @@ def test_measure_mcp_config_reports_each_server_and_the_total(
     assert "4 tools from 2 of 4 servers" in table.stdout
 
 
+@pytest.mark.parametrize("fmt", ["table", "markdown", "json"])
+def test_measure_mcp_config_with_price(
+    runner: CliRunner,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    fmt: str,
+) -> None:
+    _fake_servers(monkeypatch)
+    config = _config(tmp_path, {"github": {"command": "github"}, "files": {"command": "files"}})
+
+    result = invoke(runner, "measure", "--mcp-config", config, "--price", "3000", "-f", fmt)
+
+    assert result.exit_code == 0, result.output
+    assert result.stderr == ""
+
+    if fmt == "json":
+        data = json.loads(result.stdout)
+
+        assert "cost" in data
+        assert data["cost"]["usd_per_million_input_tokens"] == 3000.0
+        assert data["cost"]["usd_per_1000_requests"] == pytest.approx(
+            data["total_tokens"] * 3000.0 / 1000
+        )
+
+        for source in data["sources"]:
+            assert "cost" in source
+            assert source["cost"]["usd_per_million_input_tokens"] == 3000.0
+            assert source["cost"]["usd_per_1000_requests"] == pytest.approx(
+                source["tokens"] * 3000.0 / 1000
+            )
+    else:
+        assert "Cost" in result.stdout
+        assert "At $3,000.00 per million input tokens:" in result.stdout
+        assert "per 1,000 requests" in result.stdout
+
+
 def test_measure_mcp_config_exits_2_when_no_server_is_measured(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1143,6 +1179,23 @@ def test_measure_mcp_config_bad_tokenizer_fails_before_starting_servers(
     result = invoke(runner, "measure", "--mcp-config", config, "-t", "bogus")
     assert result.exit_code == 2
     assert result.stderr.startswith("error: unknown tokenizer 'bogus'")
+    assert started == []
+
+
+@pytest.mark.parametrize("price", ["0", "-1", "nan", "inf", "-inf"])
+def test_measure_mcp_config_rejects_invalid_price(
+    runner: CliRunner,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    price: str,
+) -> None:
+    started = _fake_servers(monkeypatch)
+    config = _config(tmp_path, {"a": {"command": "a"}})
+
+    result = invoke(runner, "measure", "--mcp-config", config, "--price", price)
+
+    assert result.exit_code == 2
+    assert result.stderr == "error: --price must be a finite number greater than zero\n"
     assert started == []
 
 
@@ -1321,11 +1374,3 @@ def test_doctor_reports_all_installed_extras(
         "jsonschema",
     ):
         assert f"{name}: 9.8.7" in result.stdout
-
-
-def test_measure_price_with_mcp_config_is_a_usage_error(runner: CliRunner, tmp_path: Path) -> None:
-    config = tmp_path / "mcp.json"
-    config.write_text('{"mcpServers": {"x": {"command": "never-started"}}}', encoding="utf-8")
-    result = invoke(runner, "measure", "--mcp-config", config, "--price", "3")
-    assert result.exit_code == 2
-    assert "--price can't be combined with --mcp-config" in result.stderr

@@ -311,19 +311,18 @@ def measure(
 ) -> None:
     """Count the tokens each tool definition costs."""
     width, color = _style(sys.stdout) if output is None else (DEFAULT_WIDTH, False)
+    if price is not None and (not math.isfinite(price) or price <= 0):
+        raise UsageProblem("--price must be a finite number greater than zero")
+
     if mcp_config is not None:
         if source is not None or mcp is not None or mcp_url is not None:
             raise UsageProblem("give only one of SOURCE, --mcp, --mcp-url or --mcp-config")
-        if price is not None:
-            raise UsageProblem("--price can't be combined with --mcp-config yet")
-        _measure_mcp_config(mcp_config, mcp_timeout, tokenizer, fmt, output, width, color)
+        _measure_mcp_config(mcp_config, mcp_timeout, tokenizer, fmt, output, width, color, price)
         return
 
     from toolism.measurement import measure as measure_toolset
     from toolism.report import render_token_report
 
-    if price is not None and (not math.isfinite(price) or price <= 0):
-        raise UsageProblem("--price must be a finite number greater than zero")
     toolset = _load(source, mcp, mcp_timeout, mcp_url=mcp_url)
     report = measure_toolset(toolset, tokenizer)
     try:
@@ -341,6 +340,7 @@ def _measure_mcp_config(
     output: Path | None,
     width: int,
     color: bool,
+    price: float | None = None,
 ) -> None:
     from toolism.loaders.mcp_config import load_mcp_config
     from toolism.measurement import measure_sources
@@ -350,7 +350,7 @@ def _measure_mcp_config(
     counter = get_tokenizer(tokenizer)  # a bad --tokenizer fails before any server starts
     loaded, not_measured = load_mcp_config(path, timeout=timeout)
     report = measure_sources(loaded, counter, not_measured=not_measured)
-    _emit(render_sources_report(report, fmt.value, width=width, color=color), output)
+    _emit(render_sources_report(report, fmt.value, width=width, color=color, price=price), output)
     failed = any(not reason.startswith("skipped:") for _, reason in not_measured)
     hint = "set TOOLISM_DEBUG=1 to see the servers' stderr" if failed else None
     if not loaded:  # the report above says why each server was not measured
