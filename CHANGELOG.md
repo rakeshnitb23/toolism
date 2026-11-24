@@ -15,7 +15,8 @@ All notable changes to this project are documented here. The format follows
   rewrites `toolSpec.inputSchema.json` and preserves `cachePoint` entries (#142).
 - `toolism rules RULE`: show a single rule by ID or name, with full details and options.
 - `toolism doctor` reports local versions and optional dependencies for bug reports,
-  without network requests or revealing API keys.
+  including the `google-genai` version and whether `GEMINI_API_KEY` and `GOOGLE_API_KEY`
+  are set, without network requests or revealing API keys (#202).
 - `toolism measure --price USD_PER_MTOK` estimates tool-definition cost per 1,000
   requests in table, Markdown and JSON reports, using a user-supplied price.
 - `toolism measure --mcp-config FILE` measures every stdio server in an MCP client config
