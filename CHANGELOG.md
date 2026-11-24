@@ -28,6 +28,8 @@ All notable changes to this project are documented here. The format follows
   `pip install "toolism[gemini]"` (Python 3.11+, `google-genai` 3.0.0 or newer) and needing
   `GEMINI_API_KEY` or `GOOGLE_API_KEY`. Schemas are sent as full JSON Schema, so `$defs` and
   `$ref` work (#28).
+- `TOOLISM_CACHE_DIR` now reuses Gemini token counts across runs, including the baseline
+  and the count for the full tool list (#202).
 
 ### Changed
 

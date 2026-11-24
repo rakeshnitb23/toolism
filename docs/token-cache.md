@@ -1,20 +1,30 @@
 # Persistent API count cache
 
-Set a nonempty `TOOLISM_CACHE_DIR` to reuse Anthropic counts between runs:
+Set a nonempty `TOOLISM_CACHE_DIR` to reuse Anthropic or Gemini counts between runs:
 
 ```bash
 TOOLISM_CACHE_DIR=.cache/toolism toolism measure tools.json -t anthropic:claude-sonnet-5
 ```
 
-Unset or empty means persistence is disabled. The normal Anthropic package/key checks still run.
-Explicitly injected clients and `ANTHROPIC_CUSTOM_HEADERS` configurations keep their existing
-memory-only behavior. Clients with an unidentified/ambiguous endpoint or API-version identity
-also remain uncached. This does not add Gemini support.
+For Gemini, select `-t gemini:<model>` with the same cache directory. Toolism still requires
+the provider package and a nonempty key. For Gemini that is `GOOGLE_API_KEY` or
+`GEMINI_API_KEY`. With `google-genai` 3.0.0, the SDK accepts tool declarations in
+Enterprise (Vertex AI) mode, which can be selected with `GOOGLE_GENAI_USE_ENTERPRISE=true`.
+Use a model and credentials for that service. The default Developer API mode rejects
+tool declarations before making a request.
+
+An unset or empty cache directory disables persistence. Explicitly injected clients and
+Anthropic clients with `ANTHROPIC_CUSTOM_HEADERS` keep their normal memory-only behavior.
+Toolism also skips persistence when it cannot identify the endpoint and API version.
 
 A complete, unexpired cache of an unchanged workload makes zero count API requests, including
-the empty-request baseline, probe and aggregate tool-set requests. Totals are never reconstructed
-by summing marginal counts. Changing a tool, wire key order, model, SDK, toolism version or
-counting recipe causes the corresponding misses. Missing, invalid, expired or evicted entries
+the empty-request baseline, Anthropic's probe and aggregate tool-set requests. Gemini caches
+the provider's raw counts for the ordered function declarations and the request without tools.
+It subtracts the baseline when producing each report. The two providers have separate cache
+identities. Gemini also distinguishes API modes, endpoints, API versions, projects and locations.
+Totals are never reconstructed by summing marginal counts. Changing a tool, wire key order,
+model, SDK, toolism version or counting recipe causes the corresponding misses.
+Missing, invalid, expired or evicted entries
 are counted normally; provider errors retain their existing behavior.
 
 The directory contains one `toolism-token-counts-v1.json` snapshot with hashed identities,

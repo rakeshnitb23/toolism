@@ -28,9 +28,13 @@ Only the latest release receives security fixes.
   server is reported by its name, without its command line, and any `env` or argument value of
   3 or more characters is masked if the server's error repeats it. With `TOOLISM_DEBUG=1` the
   servers' own stderr is passed through unfiltered.
-- **`anthropic:<model>` tokenization** sends the tool definitions to Anthropic's `count_tokens`
-  API using your `ANTHROPIC_API_KEY`. The `heuristic` and `tiktoken:*` tokenizers count locally;
-  tiktoken downloads its vocabulary file once on first use (set `TIKTOKEN_CACHE_DIR` to control
+- **Provider tokenizers send tool definitions to the selected provider.** `anthropic:<model>`
+  uses Anthropic's `count_tokens` API with your `ANTHROPIC_API_KEY`.
+  `gemini:<model>` sends function names, descriptions
+  and input schemas to Google's `count_tokens` API. An opt-in local count cache can reuse
+  successful results. On a cache miss, the tokenizer still sends the request.
+  The `heuristic` and `tiktoken:*` tokenizers count locally.
+  Tiktoken downloads its vocabulary file once on first use (set `TIKTOKEN_CACHE_DIR` to control
   where it is cached). For no network access at all, use a file/stdin input with `-t heuristic`.
 - **The GitHub Action** passes its inputs to the CLI through environment variables, never by
   interpolating them into a shell script, and needs no write permissions.

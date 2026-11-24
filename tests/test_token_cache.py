@@ -16,7 +16,9 @@ from toolism.measurement import measure
 from toolism.models import ToolDef, ToolFormat, ToolSet
 from toolism.pipeline import slim
 from toolism.tokenizers import anthropic_tokenizer as anthropic_module
+from toolism.tokenizers import gemini_tokenizer as gemini_module
 from toolism.tokenizers.anthropic_tokenizer import AnthropicTokenizer
+from toolism.tokenizers.gemini_tokenizer import GeminiTokenizer
 
 TOOLS = (
     ToolDef("alpha", "private-schema-canary", {"type": "object", "title": "A"}),
@@ -64,6 +66,190 @@ def cache_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     monkeypatch.setenv("TOOLISM_CACHE_DIR", str(tmp_path / "cache"))
     monkeypatch.delenv("ANTHROPIC_CUSTOM_HEADERS", raising=False)
     return tmp_path / "cache"
+
+
+@pytest.fixture
+def gemini_client(monkeypatch: pytest.MonkeyPatch) -> Any:
+    calls: list[list[dict[str, Any]]] = []
+    options = {"base_url": "https://example.test/", "api_version": "v1"}
+
+    def count(*, model: str, contents: str, config: Any = None) -> Any:
+        assert contents == "."
+        tools = config["tools"][0]["function_declarations"] if config else []
+        calls.append(tools)
+        total = 7
+        if tools:
+            total += len(model) + len(json.dumps(tools)) + 19 * len(tools) ** 2
+        return SimpleNamespace(total_tokens=total)
+
+    client = SimpleNamespace(
+        vertexai=True,
+        _api_client=SimpleNamespace(
+            get_read_only_http_options=lambda: options, project=None, location=None
+        ),
+        models=SimpleNamespace(count_tokens=count),
+        calls=calls,
+    )
+    monkeypatch.setattr(GeminiTokenizer, "_make_client", staticmethod(lambda: client))
+    monkeypatch.setattr(gemini_module, "version", lambda _: "3.0.0", raising=False)
+    return client
+
+
+def test_gemini_and_anthropic_share_a_file_but_not_counts(
+    monkeypatch: pytest.MonkeyPatch, gemini_client: Any, cache_directory: Path
+) -> None:
+    gemini = measure(TOOLSET, GeminiTokenizer("same-model"))
+    assert len(gemini_client.calls) == 4  # bundle, baseline, two singletons
+    assert gemini.total != sum(row.tokens for row in gemini.tools)
+    other, anthropic_client = tokenizer(monkeypatch, "same-model")
+    anthropic = measure(TOOLSET, other)
+    assert len(anthropic_client.calls) == 5
+    assert gemini.total != anthropic.total
+    gemini_client.calls.clear()
+    assert measure(TOOLSET, GeminiTokenizer("same-model")) == gemini
+    assert gemini_client.calls == []
+    other, anthropic_client = tokenizer(monkeypatch, "same-model")
+    assert measure(TOOLSET, other) == anthropic
+    assert anthropic_client.calls == []
+    assert len(list(cache_directory.iterdir())) == 1
+
+
+def test_gemini_keys_follow_the_ordered_declarations(gemini_client: Any) -> None:
+    schema = {"type": "object", "title": "A"}
+    tool = ToolDef("mutable", input_schema=schema)
+    counter = GeminiTokenizer("model")
+    counter.count_tool(tool)
+    schema["title"] = "B"
+    counter.count_tools([tool])
+    reordered = ToolDef("mutable", input_schema=dict(reversed(schema.items())))
+    counter.count_tool(reordered)
+    counter.count_tools([reordered, tool])
+    counter.count_tools([tool, reordered])
+    counter.count_tools([tool, tool])
+    assert len(gemini_client.calls) == 7  # six different requests plus the baseline
+    gemini_client.calls.clear()
+    assert counter.count_tools([ToolDef("opaque", opaque=True)]) == 0
+    counter.count_tools([tool])
+    counter.count_tool(reordered)
+    counter.count_tools([tool, tool])
+    assert gemini_client.calls == []
+
+
+def test_gemini_keys_use_the_model_sent_in_the_request(gemini_client: Any) -> None:
+    counter = GeminiTokenizer("first")
+    first = counter.count_tools(TOOLS)
+    counter.model = "another-model"
+    assert counter.count_tools(TOOLS) != first
+    assert len(gemini_client.calls) == 4
+    gemini_client.calls.clear()
+    assert GeminiTokenizer("first").count_tools(TOOLS) == first
+    assert not gemini_client.calls
+
+
+@pytest.mark.parametrize(
+    "identity", ["model", "mode", "endpoint", "api_version", "project", "location", "sdk"]
+)
+def test_gemini_context_changes_are_cold(
+    monkeypatch: pytest.MonkeyPatch, gemini_client: Any, identity: str
+) -> None:
+    model = "a"
+    GeminiTokenizer(model).count_tool(TOOLS[0])
+    if identity == "model":
+        model = "b"
+    elif identity == "mode":
+        gemini_client.vertexai = False
+    elif identity in {"project", "location"}:
+        setattr(gemini_client._api_client, identity, "other")
+    elif identity == "sdk":
+        monkeypatch.setattr(gemini_module, "version", lambda _: "next-sdk")
+    else:
+        options = gemini_client._api_client.get_read_only_http_options()
+        options.update(
+            {"base_url": "https://other.test/"} if identity == "endpoint" else {"api_version": "v2"}
+        )
+    gemini_client.calls.clear()
+    GeminiTokenizer(model).count_tool(TOOLS[0])
+    assert len(gemini_client.calls) == 2
+
+
+@pytest.mark.parametrize("setting", ["unset", "empty", "injected", "unknown-endpoint"])
+def test_gemini_memory_only(
+    monkeypatch: pytest.MonkeyPatch, gemini_client: Any, cache_directory: Path, setting: str
+) -> None:
+    if setting == "unset":
+        monkeypatch.delenv("TOOLISM_CACHE_DIR")
+    elif setting == "empty":
+        monkeypatch.setenv("TOOLISM_CACHE_DIR", "")
+    elif setting == "unknown-endpoint":
+        gemini_client._api_client.get_read_only_http_options().pop("base_url")
+    for _ in range(2):
+        counter = GeminiTokenizer("m", client=gemini_client if setting == "injected" else None)
+        counter.count_tool(TOOLS[0])
+        counter.count_tool(TOOLS[0])
+    assert len(gemini_client.calls) == 4
+    assert not cache_directory.exists()
+
+
+def test_gemini_zero_raw_count_and_negative_difference(gemini_client: Any) -> None:
+    calls = []
+
+    def negative(**kwargs: Any) -> Any:
+        calls.append(kwargs)
+        return SimpleNamespace(total_tokens=0 if "config" in kwargs else 5)
+
+    gemini_client.models.count_tokens = negative
+    for _ in range(2):
+        counter = GeminiTokenizer("model")
+        assert counter.count_tools([TOOLS[0]]) == -5
+        assert counter.count_tool(TOOLS[0]) == 0
+    assert len(calls) == 2
+
+
+def test_gemini_cache_with_the_installed_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("google.genai")
+    monkeypatch.setenv("GOOGLE_API_KEY", "test-key")
+    monkeypatch.setenv("GOOGLE_GENAI_USE_ENTERPRISE", "true")
+    for name in (
+        "GEMINI_API_KEY",
+        "GOOGLE_CLOUD_PROJECT",
+        "GOOGLE_CLOUD_LOCATION",
+        "GOOGLE_GEMINI_BASE_URL",
+        "GOOGLE_GENAI_API_VERSION",
+        "GOOGLE_GENAI_USE_VERTEXAI",
+        "GOOGLE_VERTEX_BASE_URL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    calls = []
+
+    def count(self: Any, **kwargs: Any) -> Any:
+        calls.append(kwargs)
+        return SimpleNamespace(total_tokens=17 if "config" in kwargs else 2)
+
+    monkeypatch.setattr("google.genai.models.Models.count_tokens", count)
+    for _ in range(2):
+        assert GeminiTokenizer("gemini-test").count_tool(TOOLS[0]) == 15
+    assert len(calls) == 2
+
+
+def test_gemini_recounts_if_snapshot_expires_mid_request(
+    monkeypatch: pytest.MonkeyPatch, gemini_client: Any
+) -> None:
+    from toolism.tokenizers import _cache
+
+    now = [1000]
+    monkeypatch.setattr(_cache, "time", lambda: now[0])
+    counter = GeminiTokenizer("model")
+    counter.count_tool(TOOLS[0])
+
+    def crosses(**kwargs: Any) -> Any:
+        prior = now[0] == 1000
+        if prior:
+            now[0] += _cache.TTL_SECONDS
+        total = (10 if prior else 100) + (5 if "config" in kwargs else 0)
+        return SimpleNamespace(total_tokens=total)
+
+    gemini_client.models.count_tokens = crosses
+    assert counter.count_tools([TOOLS[1]]) == 5
 
 
 @pytest.mark.parametrize("operation", ["marginals", "measure", "slim"])
