@@ -70,6 +70,16 @@ Tool definition tokens
 708 tokens across 3 tools (average 236) — tiktoken:o200k_base (approximate)
 ```
 
+You can use `--top N` to control how many tools appear in table or markdown reports.
+The 25 tools with the highest tokens count are shown by default. Use `--top 0` to show all tools.
+
+```console
+$ toolism measure examples/mcp_tools.json --top 1
+$ toolism measure examples/mcp_tools.json --top 0
+```
+
+JSON output ignores `--top`, so all the tools are included.
+
 **Slim** them. The JSON goes to stdout in the same format and envelope as the input; the report
 goes to stderr:
 
