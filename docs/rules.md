@@ -19,6 +19,7 @@ annotations and run with `--level annotations`. Turn any rule on or off with `--
 | [`SL008`](#sl008-noop-keywords) | noop-keywords | safe | default |
 | [`SL009`](#sl009-schema-uri) | schema-uri | safe | default |
 | [`SL010`](#sl010-single-allof) | single-allof | safe | default |
+| [`SL011`](#sl011-single-enum) | single-enum | safe | default |
 | [`SL101`](#sl101-max-description-length) | max-description-length | annotations | `--level annotations` |
 | [`SL102`](#sl102-drop-examples) | drop-examples | annotations | `--level annotations` |
 | [`SL103`](#sl103-drop-titles) | drop-titles | annotations | `--level annotations` |
@@ -151,6 +152,18 @@ Strict tools, unknown or nested dialects, dynamic scopes and references other th
 root-definition pointers are skipped. This keeps reference targets and scope intact.
 Under draft <= 7 a branch's `$ref` is only hoisted when it gains no siblings; a parent
 `$ref` is left alone. Keyword order and all annotation values are preserved.
+
+- Safety: `safe` — Validation-equivalent; removes only provably redundant information.
+- Enabled by: default
+
+## SL011 single-enum
+
+**Replace a single-value enum with const.**
+
+A singleton enum and const accept exactly the same JSON values in draft 6
+and later. Preserve siblings and key order, and never overwrite an existing
+const. Strict tools, unknown dialects, nested dialects and potentially affected
+references are left alone. Schemas without a dialect use the project's default.
 
 - Safety: `safe` — Validation-equivalent; removes only provably redundant information.
 - Enabled by: default

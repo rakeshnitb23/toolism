@@ -1,0 +1,395 @@
+[
+  {
+    "name": "singleton \"page_id\"",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": [
+          "page_id"
+        ]
+      }
+    },
+    "expected_schema": {
+      "const": "page_id"
+    }
+  },
+  {
+    "name": "singleton null",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": [
+          null
+        ]
+      }
+    },
+    "expected_schema": {
+      "const": null
+    }
+  },
+  {
+    "name": "singleton true",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": [
+          true
+        ]
+      }
+    },
+    "expected_schema": {
+      "const": true
+    }
+  },
+  {
+    "name": "singleton false",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": [
+          false
+        ]
+      }
+    },
+    "expected_schema": {
+      "const": false
+    }
+  },
+  {
+    "name": "singleton 0",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": [
+          0
+        ]
+      }
+    },
+    "expected_schema": {
+      "const": 0
+    }
+  },
+  {
+    "name": "singleton 1",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": [
+          1
+        ]
+      }
+    },
+    "expected_schema": {
+      "const": 1
+    }
+  },
+  {
+    "name": "singleton 1.5",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": [
+          1.5
+        ]
+      }
+    },
+    "expected_schema": {
+      "const": 1.5
+    }
+  },
+  {
+    "name": "singleton [\"x\"]",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": [
+          [
+            "x"
+          ]
+        ]
+      }
+    },
+    "expected_schema": {
+      "const": [
+        "x"
+      ]
+    }
+  },
+  {
+    "name": "singleton {\"enum\":[\"literal\"]}",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": [
+          {
+            "enum": [
+              "literal"
+            ]
+          }
+        ]
+      }
+    },
+    "expected_schema": {
+      "const": {
+        "enum": [
+          "literal"
+        ]
+      }
+    }
+  },
+  {
+    "name": "draft-06",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-06/schema#",
+        "enum": [
+          "x"
+        ]
+      }
+    },
+    "expected_schema": {
+      "$schema": "http://json-schema.org/draft-06/schema#",
+      "const": "x"
+    }
+  },
+  {
+    "name": "draft-07",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "enum": [
+          "x"
+        ]
+      }
+    },
+    "expected_schema": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "const": "x"
+    }
+  },
+  {
+    "name": "draft/2019-09",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "$schema": "http://json-schema.org/draft/2019-09/schema#",
+        "enum": [
+          "x"
+        ]
+      }
+    },
+    "expected_schema": {
+      "$schema": "http://json-schema.org/draft/2019-09/schema#",
+      "const": "x"
+    }
+  },
+  {
+    "name": "draft/2020-12",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "$schema": "http://json-schema.org/draft/2020-12/schema#",
+        "enum": [
+          "x"
+        ]
+      }
+    },
+    "expected_schema": {
+      "$schema": "http://json-schema.org/draft/2020-12/schema#",
+      "const": "x"
+    }
+  },
+  {
+    "name": "siblings and order",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "description": "x",
+        "enum": [
+          "x"
+        ],
+        "type": "string"
+      }
+    },
+    "expected_schema": {
+      "description": "x",
+      "const": "x",
+      "type": "string"
+    }
+  },
+  {
+    "name": "nested schema",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "enum": [
+              1
+            ]
+          }
+        }
+      }
+    },
+    "expected_schema": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "const": 1
+        }
+      }
+    }
+  },
+  {
+    "name": "draft04",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "enum": [
+          "x"
+        ]
+      }
+    }
+  },
+  {
+    "name": "unknown",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "$schema": "https://example.invalid/dialect",
+        "enum": [
+          "x"
+        ]
+      }
+    }
+  },
+  {
+    "name": "lookalike dialect",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "$schema": "https://json-schema.org/custom/draft-07/schema",
+        "enum": [
+          "x"
+        ]
+      }
+    }
+  },
+  {
+    "name": "nested dialect",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "properties": {
+          "x": {
+            "$schema": "http://json-schema.org/draft-04/schema#",
+            "enum": [
+              "x"
+            ]
+          }
+        },
+        "enum": [
+          {}
+        ]
+      }
+    }
+  },
+  {
+    "name": "strict",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": [
+          "x"
+        ]
+      }
+    },
+    "strict": true
+  },
+  {
+    "name": "existing const",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": [
+          1
+        ],
+        "const": 2
+      }
+    }
+  },
+  {
+    "name": "multiple",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": [
+          1,
+          2
+        ]
+      }
+    }
+  },
+  {
+    "name": "empty",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": []
+      }
+    }
+  },
+  {
+    "name": "invalid",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "enum": "x"
+      }
+    }
+  },
+  {
+    "name": "literal",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "default": {
+          "enum": [
+            "x"
+          ]
+        },
+        "examples": [
+          {
+            "enum": [
+              "x"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "pointer into enum",
+    "tool": {
+      "name": "t",
+      "schema": {
+        "properties": {
+          "x": {
+            "enum": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "y": {
+            "$ref": "#/properties/x/enum/0"
+          }
+        }
+      }
+    }
+  }
+]

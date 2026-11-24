@@ -8,6 +8,8 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- SL011 single-enum replaces singleton enums with const when dialect and tool constraints allow (#139).
+
 - Streamable-HTTP MCP loading with `--mcp-url URL` on `measure`, `slim` and `check`,
   plus `load_mcp_http` and its async variant. Includes bounded pagination, the shared
   MCP timeout and connection-error hints; live and file inputs are mutually exclusive.
