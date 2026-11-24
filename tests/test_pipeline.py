@@ -50,7 +50,18 @@ def toolset(*items: dict[str, Any]) -> ToolSet:
 
 def test_select_rules_by_level_enable_disable() -> None:
     safe = [r.id for r in select_rules("safe")]
-    assert safe == ["SL001", "SL002", "SL003", "SL004", "SL005", "SL006", "SL008", "SL009", "SL010"]
+    assert safe == [
+        "SL001",
+        "SL002",
+        "SL003",
+        "SL004",
+        "SL005",
+        "SL006",
+        "SL008",
+        "SL009",
+        "SL010",
+        "SL011",
+    ]
     annotations = [r.id for r in select_rules("annotations")]
     assert annotations == [
         *safe,
