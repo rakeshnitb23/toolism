@@ -121,6 +121,37 @@ def test_token_report_truncates_long_tables() -> None:
     assert md.count("| `t") == 25
 
 
+def test_token_report_custom_top() -> None:
+    report = TokenReport(
+        tokenizer="heuristic",
+        approximate=True,
+        total=3000,
+        tool_count=30,
+        tools=tuple(ToolCount(f"t{i:02}", 100) for i in range(30)),
+        uncounted=(),
+    )
+    # displays only 5 tools and reports the remaining 25 as hidden
+    table_report = render_token_report(report, "table", width=200, top=5)
+    assert "t00" in table_report
+    assert "t29" not in table_report
+    assert "25 more tools (2,500 tokens)" in table_report
+    # displays only 5 tools
+    markdown_report = render_token_report(report, "markdown", width=200, top=5)
+    assert markdown_report.count("| `t") == 5
+    assert "25 more tools (2,500 tokens)" in markdown_report
+    # displays all tools
+    markdown_all = render_token_report(report, "markdown", top=0)
+    assert markdown_all.count("| `t") == 30
+    assert "more tools" not in markdown_all
+    # default limit remains 25
+    assert render_token_report(report) == render_token_report(report, top=25)
+    # json ignores the top limit and includes all the tools
+    json_default = render_token_report(report, "json")
+    json_top_5 = render_token_report(report, "json", top=5)
+    assert json_top_5 == json_default
+    assert len(json.loads(json_top_5)["tools"]) == 30
+
+
 def test_color_output_has_ansi_codes() -> None:
     report = measure(TOOLS, H)
     assert "\x1b[" in render_token_report(report, "table", color=True)

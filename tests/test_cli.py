@@ -103,6 +103,38 @@ def test_measure_table(runner: CliRunner) -> None:
     assert result.stderr == ""
 
 
+def test_measure_top_option(runner: CliRunner) -> None:
+    # displays only 1 tool and reports the remaining tools as hidden
+    top_one = invoke(runner, "measure", MCP_TOOLS, "--top", "1")
+    assert top_one.exit_code == 0
+    assert "create_issue" in top_one.stdout
+    assert "ping" not in top_one.stdout
+    assert "1 more tools" in top_one.stdout
+    # displays every tool without hidden tool message
+    top_all = invoke(runner, "measure", MCP_TOOLS, "--top", "0")
+    assert top_all.exit_code == 0
+    assert "create_issue" in top_all.stdout
+    assert "ping" in top_all.stdout
+    assert "more tools" not in top_all.stdout
+    # default output remains unchanged
+    default = invoke(runner, "measure", MCP_TOOLS)
+    top_default = invoke(runner, "measure", MCP_TOOLS, "--top", "25")
+    assert default.exit_code == 0
+    assert top_default.exit_code == 0
+    assert default.stdout == top_default.stdout
+    # json ignores --top and includes all tools
+    json_result = invoke(runner, "measure", MCP_TOOLS, "--top", "1", "-f", "json")
+    assert json_result.exit_code == 0
+    assert len(json.loads(json_result.stdout)["tools"]) == 2
+
+
+def test_measure_top_rejects_negative_value(runner: CliRunner) -> None:
+    # negative values are not allowed
+    result = invoke(runner, "measure", MCP_TOOLS, "--top", "-1")
+    assert result.exit_code == 2
+    assert "Invalid value" in result.output
+
+
 def test_measure_json_and_tokenizer_flag(runner: CliRunner) -> None:
     result = invoke(runner, "measure", MCP_TOOLS, "-f", "json", "-t", "heuristic")
     data = json.loads(result.stdout)

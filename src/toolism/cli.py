@@ -22,6 +22,7 @@ import typer
 from toolism.__about__ import __version__
 from toolism.errors import LoaderError, TokenizerUnavailable, ToolismError
 from toolism.models import ToolSet
+from toolism.report import TOP_N
 
 __all__ = ["app", "main"]
 
@@ -303,6 +304,15 @@ def measure(
     fmt: Annotated[
         OutputFormat, typer.Option("--format", "-f", help="Report format.")
     ] = OutputFormat.table,
+    top: Annotated[
+        int,
+        typer.Option(
+            "--top",
+            metavar="N",
+            min=0,
+            help="Show N most expensive tools (0 shows all. ignored for JSON output)",
+        ),
+    ] = TOP_N,
     output: OutputOpt = None,
     price: Annotated[
         float | None,
@@ -327,7 +337,9 @@ def measure(
     toolset = _load(source, mcp, mcp_timeout, mcp_url=mcp_url)
     report = measure_toolset(toolset, tokenizer)
     try:
-        rendered = render_token_report(report, fmt.value, width=width, color=color, price=price)
+        rendered = render_token_report(
+            report, fmt.value, width=width, color=color, price=price, top=top
+        )
     except ValueError as exc:
         raise UsageProblem(str(exc)) from None
     _emit(rendered, output)

@@ -129,6 +129,7 @@ def render_token_report(
     width: int = 100,
     color: bool = False,
     price: float | None = None,
+    top: int = TOP_N,
 ) -> str:
     if fmt == "json":
         return (
@@ -136,7 +137,12 @@ def render_token_report(
             + "\n"
         )
     ranked = sorted(report.tools, key=lambda t: (-t.tokens, t.name))
-    shown, hidden = ranked[:TOP_N], ranked[TOP_N:]
+    if top < 0:
+        raise ValueError("--top must be 0 or greater")
+    if top == 0:
+        shown, hidden = ranked, []
+    else:
+        shown, hidden = ranked[:top], ranked[top:]
     summary = (
         f"{_n(report.total)} tokens across {report.tool_count} tools "
         f"(average {report.average:,.0f}) — {_tokenizer_note(report.tokenizer, report.approximate)}"
