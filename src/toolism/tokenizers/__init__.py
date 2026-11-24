@@ -31,7 +31,10 @@ _FORMS = "use 'heuristic', 'tiktoken:<encoding>', 'anthropic:<model>' or 'gemini
 
 def _batch_counts(counter: Tokenizer) -> AbstractContextManager[None]:
     """Batch only the built-in persistent cache; custom tokenizers need no lifecycle API."""
-    if isinstance(counter, AnthropicTokenizer) and counter._persistent is not None:
+    if (
+        isinstance(counter, (AnthropicTokenizer, GeminiTokenizer))
+        and counter._persistent is not None
+    ):
         return counter._persistent.batch()
     return nullcontext()
 

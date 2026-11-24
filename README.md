@@ -361,11 +361,14 @@ The hook runs whenever a matching file is staged. Create the baseline once with
 | `tiktoken:o200k_base` (default) | OpenAI models; a good approximation elsewhere |
 | `heuristic` | offline, no dependencies; within ~3% of o200k on the benchmark |
 | `anthropic:<model>` | provider-reported counts from Anthropic's `count_tokens` API (needs `ANTHROPIC_API_KEY`) |
-| `gemini:<model>` | exact counts from Gemini's `count_tokens` API (needs `GEMINI_API_KEY`) |
+| `gemini:<model>` | provider-reported tool counts from Google (needs `GOOGLE_API_KEY` or `GEMINI_API_KEY` and an SDK mode that supports tool declarations) |
+
+With `google-genai` 3.0.0, tool counting requires Gemini Enterprise Agent Platform
+(Vertex AI) mode. The default Developer API mode rejects tool declarations.
 
 ### Persistent API count cache
 
-Reuse Anthropic counts between runs by setting `TOOLISM_CACHE_DIR=.cache/toolism` to opt in.
+Reuse Anthropic and Gemini counts between runs by setting `TOOLISM_CACHE_DIR=.cache/toolism`.
 Persistence is disabled by default. Use a trusted cache directory; see the
 [persistent API count cache guide](https://github.com/rakeshnitb23/toolism/blob/master/docs/token-cache.md)
 for setup, limits and security details.
@@ -386,11 +389,13 @@ the tokenizer and say whether the count is approximate. Set a default with `TOOL
 | Variable | Read in | What it does | When unset |
 | --- | --- | --- | --- |
 | `TOOLISM_TOKENIZER` | `tokenizers/__init__.py` | Default tokenizer when `-t`/`--tokenizer` isn't given (same forms as `-t`) | `tiktoken:o200k_base` |
-| `TOOLISM_CACHE_DIR` | `tokenizers/anthropic_tokenizer.py` | Opt-in directory for bounded persistent Anthropic count snapshots | Persistence disabled (also when empty) |
+| `TOOLISM_CACHE_DIR` | Anthropic and Gemini tokenizers | Opt-in directory for bounded persistent count snapshots | Persistence disabled (also when empty) |
 | `TOOLISM_DEBUG` | `cli.py`, `loaders/mcp.py` | Any non-empty value shows the full traceback instead of a one-line `error:`, and passes an `--mcp` or `--mcp-config` server's stderr through to yours | One-line errors; the server's stderr is captured and hidden |
 | `NO_COLOR` | `cli.py` | If set (to any value), terminal output is not coloured | Coloured when writing to a terminal |
 | `TIKTOKEN_CACHE_DIR` | tiktoken | Where the `tiktoken:*` vocabulary is cached, so it can be reused offline | tiktoken's default cache in the system temp directory |
 | `ANTHROPIC_API_KEY` | `tokenizers/anthropic_tokenizer.py` | Needed for `-t anthropic:<model>` | `anthropic:` tokenizers fail with exit code 3 |
+| `GOOGLE_API_KEY` | Gemini tokenizer and Google SDK | Preferred API key for `-t gemini:<model>` when both keys are nonempty | Falls back to `GEMINI_API_KEY` |
+| `GEMINI_API_KEY` | Gemini tokenizer and Google SDK | Alternative API key for `-t gemini:<model>` | Uses `GOOGLE_API_KEY`. If both keys are empty or unset, the CLI exits with code 3 |
 | `GITHUB_STEP_SUMMARY` | `cli.py` | `toolism check` appends its Markdown summary to this file (set by GitHub Actions) | No step summary is written |
 
 A server started with `--mcp` or `--mcp-config` inherits toolism's environment. The GitHub Action
