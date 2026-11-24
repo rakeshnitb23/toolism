@@ -1247,9 +1247,22 @@ def test_rules_unknown_uses_existing_error(runner: CliRunner, selector: str) -> 
     )
 
 
-@pytest.mark.parametrize("key_value", [None, "", "private-api-key-sentinel"])
+@pytest.mark.parametrize(
+    ("anthropic_key", "gemini_key", "google_key"),
+    [
+        (None, None, None),
+        ("", "", ""),
+        ("private-api-key-sentinel", "gemini-key-sentinel", ""),
+        (None, "", "google-key-sentinel"),
+        (None, "gemini-key-sentinel", "google-key-sentinel"),
+    ],
+)
 def test_doctor_reports_versions_without_secrets_or_network(
-    runner: CliRunner, monkeypatch: pytest.MonkeyPatch, key_value: str | None
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    anthropic_key: str | None,
+    gemini_key: str | None,
+    google_key: str | None,
 ) -> None:
     import importlib.metadata
     import platform
@@ -1273,6 +1286,7 @@ def test_doctor_reports_versions_without_secrets_or_network(
     monkeypatch.setattr(socket.socket, "connect", no_network)
     for module in (
         "anthropic",
+        "google.genai",
         "mcp",
         "hypothesis",
         "hypothesis_jsonschema",
@@ -1280,10 +1294,16 @@ def test_doctor_reports_versions_without_secrets_or_network(
         "tiktoken",
     ):
         monkeypatch.setitem(sys.modules, module, None)
-    if key_value is None:
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    else:
-        monkeypatch.setenv("ANTHROPIC_API_KEY", key_value)
+    keys = {
+        "ANTHROPIC_API_KEY": anthropic_key,
+        "GEMINI_API_KEY": gemini_key,
+        "GOOGLE_API_KEY": google_key,
+    }
+    for name, value in keys.items():
+        if value is None:
+            monkeypatch.delenv(name, raising=False)
+        else:
+            monkeypatch.setenv(name, value)
     monkeypatch.setenv("UNRELATED_SECRET", "unrelated-secret-sentinel")
 
     result = invoke(runner, "doctor")
@@ -1294,10 +1314,12 @@ def test_doctor_reports_versions_without_secrets_or_network(
     assert "OS: TestOS 1.0" in result.stdout
     for name, value in installed.items():
         assert f"{name}: {value}" in result.stdout
-    for name in ("mcp", "anthropic", "hypothesis-jsonschema", "jsonschema"):
+    for name in ("mcp", "anthropic", "google-genai", "hypothesis-jsonschema", "jsonschema"):
         assert f"{name}: not installed" in result.stdout
-    assert f"ANTHROPIC_API_KEY: {'set' if key_value else 'not set'}" in result.stdout
-    assert "private-api-key-sentinel" not in result.output
+    for name, value in keys.items():
+        assert f"{name}: {'set' if value else 'not set'}" in result.stdout.splitlines()
+        if value:
+            assert value not in result.output
     assert "unrelated-secret-sentinel" not in result.output
     assert result.stderr == ""
 
@@ -1316,6 +1338,7 @@ def test_doctor_reports_all_installed_extras(
         "tiktoken",
         "mcp",
         "anthropic",
+        "google-genai",
         "hypothesis",
         "hypothesis-jsonschema",
         "jsonschema",

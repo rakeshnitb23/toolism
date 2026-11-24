@@ -266,6 +266,7 @@ def doctor() -> None:
         "tiktoken",
         "mcp",
         "anthropic",
+        "google-genai",
         "hypothesis",
         "hypothesis-jsonschema",
         "jsonschema",
@@ -276,8 +277,9 @@ def doctor() -> None:
             installed = "not installed"
         typer.echo(f"{package}: {installed}")
     # Report presence only, never environment values or arbitrary variable names.
-    key_status = "set" if os.environ.get("ANTHROPIC_API_KEY") else "not set"
-    typer.echo(f"ANTHROPIC_API_KEY: {key_status}")
+    for name in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
+        key_status = "set" if os.environ.get(name) else "not set"
+        typer.echo(f"{name}: {key_status}")
 
 
 @app.command()
