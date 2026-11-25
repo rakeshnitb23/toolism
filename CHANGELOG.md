@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Benchmark savings regression check in CI: compare local tokenizer results per tool set
+  and rule level against the committed reference without rewriting it (#154).
+
 - Streamable-HTTP MCP loading with `--mcp-url URL` on `measure`, `slim` and `check`,
   plus `load_mcp_http` and its async variant. Includes bounded pagination, the shared
   MCP timeout and connection-error hints; live and file inputs are mutually exclusive.

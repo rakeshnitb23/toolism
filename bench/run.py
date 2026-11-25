@@ -4,20 +4,21 @@
 
 Tokenizers: heuristic always; tiktoken o200k_base / cl100k_base when their vocabularies load;
 anthropic:<model> when ANTHROPIC_API_KEY is set (model from TOOLISM_BENCH_ANTHROPIC_MODEL).
+Use --offline to exclude remote tokenizers; --check compares the committed baseline without writing.
 """
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import importlib.metadata
 import json
 import os
 import statistics
 import sys
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
-
-import tomllib
 
 from toolism.__about__ import __version__
 from toolism.errors import ToolismError
@@ -30,11 +31,12 @@ from toolism.tokenizers import Tokenizer, get_tokenizer
 BENCH = Path(__file__).resolve().parent
 LEVELS = ("safe", "annotations")
 COMMAND = "uv run python bench/run.py"
+OFFLINE_TOKENIZERS = ("tiktoken:o200k_base", "tiktoken:cl100k_base", "heuristic")
 
 
-def available_tokenizers() -> list[Tokenizer]:
-    specs = ["tiktoken:o200k_base", "tiktoken:cl100k_base", "heuristic"]
-    if os.environ.get("ANTHROPIC_API_KEY"):
+def available_tokenizers(*, offline: bool = False) -> list[Tokenizer]:
+    specs = list(OFFLINE_TOKENIZERS)
+    if not offline and os.environ.get("ANTHROPIC_API_KEY"):
         model = os.environ.get("TOOLISM_BENCH_ANTHROPIC_MODEL", "claude-sonnet-5-5")
         specs.insert(0, f"anthropic:{model}")
     found = []
@@ -44,6 +46,8 @@ def available_tokenizers() -> list[Tokenizer]:
             tokenizer.count_tools(())
             tokenizer.count_tools(parse([{"name": "probe", "input_schema": {}}]).tools)
         except ToolismError as exc:
+            if offline:
+                raise
             print(f"skipping {spec}: {exc.message}", file=sys.stderr)
             continue
         found.append(tokenizer)
@@ -51,6 +55,8 @@ def available_tokenizers() -> list[Tokenizer]:
 
 
 def sources() -> dict[str, dict[str, str]]:
+    import tomllib
+
     with (BENCH / "servers.toml").open("rb") as handle:
         known = {s["name"]: s for s in tomllib.load(handle)["server"]}
     sdk = importlib.metadata.version("mcp")
@@ -201,8 +207,7 @@ def render(results: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def main() -> int:
-    tokenizers = available_tokenizers()
+def collect_results(tokenizers: list[Tokenizer]) -> dict[str, Any]:
     known = sources()
     snapshots = sorted((BENCH / "snapshots").glob("*.json"))
     rows = []
@@ -260,6 +265,103 @@ def main() -> int:
             "worst": max(errors, key=lambda e: abs(e["error_pct"])),
             "per_snapshot": errors,
         }
+    return results
+
+
+def offline_rows(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Validate the report dimensions needed by the savings gate."""
+    if report["toolism_report"] != 1 or report["kind"] != "benchmark":
+        raise ValueError("expected a version 1 benchmark report")
+    if not set(OFFLINE_TOKENIZERS).issubset(report["tokenizers"]):
+        raise ValueError("benchmark report is missing required offline tokenizers")
+    rows = {}
+    for row in report["snapshots"]:
+        name = row["name"]
+        if not isinstance(name, str) or not name or name in rows:
+            raise ValueError(f"invalid or duplicate tool set: {name!r}")
+        if type(row["tools"]) is not int or row["tools"] < 0:
+            raise ValueError(f"{name}: invalid tool count")
+        rows[name] = row
+    if not rows:
+        raise ValueError("benchmark report has no tool sets")
+    return rows
+
+
+def savings(row: dict[str, Any], level: str, tokenizer: str) -> tuple[int, int, Fraction]:
+    stats = row["levels"][level][tokenizer]
+    before, after, saved = (stats[key] for key in ("before", "after", "saved"))
+    if (
+        any(type(value) is not int for value in (before, after, saved))
+        or before < 0
+        or after < 0
+        or saved != before - after
+        or (before == 0 and after != 0)
+    ):
+        raise ValueError(f"{row['name']} / {level} / {tokenizer}: invalid token counts")
+    return before, saved, Fraction(100 * saved, before) if before else Fraction(0)
+
+
+def compare_results(
+    baseline: dict[str, Any], current: dict[str, Any], margin_pp: Fraction
+) -> list[str]:
+    """Compare exact savings rates, not rounded percentages or aggregate totals."""
+    old, new = offline_rows(baseline), offline_rows(current)
+    if old.keys() != new.keys():
+        raise ValueError(
+            f"tool sets changed; missing={sorted(old.keys() - new.keys())}, "
+            f"new={sorted(new.keys() - old.keys())}; regenerate the baseline deliberately"
+        )
+    failures = []
+    for name in sorted(old):
+        if old[name]["tools"] != new[name]["tools"]:
+            raise ValueError(f"{name}: tool count changed; regenerate the baseline deliberately")
+        for level in LEVELS:
+            for tokenizer in OFFLINE_TOKENIZERS:
+                before, saved, rate = savings(old[name], level, tokenizer)
+                new_before, new_saved, new_rate = savings(new[name], level, tokenizer)
+                if before != new_before:
+                    raise ValueError(
+                        f"{name} / {level} / {tokenizer}: unslimmed count changed "
+                        f"({before} -> {new_before}); regenerate the baseline deliberately"
+                    )
+                loss = rate - new_rate
+                if loss > margin_pp:
+                    failures.append(
+                        f"{name} / {level} / {tokenizer}: savings {saved} -> {new_saved} tokens; "
+                        f"lost {float(loss):.6f} percentage points "
+                        f"(allowed {float(margin_pp):.6f})"
+                    )
+    return failures
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--offline", action="store_true", help="use only local tokenizers")
+    parser.add_argument("--check", action="store_true", help="compare without rewriting results")
+    parser.add_argument(
+        "--max-loss-pp",
+        type=Fraction,
+        default=None,
+        help="explicit allowed loss in percentage points (default: no loss)",
+    )
+    args = parser.parse_args(argv)
+    if args.max_loss_pp is not None and (not args.check or args.max_loss_pp < 0):
+        parser.error("--max-loss-pp requires --check and a non-negative value")
+    try:
+        baseline = (
+            json.loads((BENCH / "results.json").read_text(encoding="utf-8")) if args.check else None
+        )
+        results = collect_results(available_tokenizers(offline=args.check or args.offline))
+        if args.check:
+            failures = compare_results(baseline, results, args.max_loss_pp or Fraction(0))
+            for failure in failures:
+                print(failure, file=sys.stderr)
+            if not failures:
+                print("Benchmark savings check passed")
+            return int(bool(failures))
+    except (OSError, ValueError, KeyError, TypeError, ToolismError) as exc:
+        print(f"Benchmark failed: {exc}", file=sys.stderr)
+        return 1
     (BENCH / "results.json").write_text(
         json.dumps(results, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
