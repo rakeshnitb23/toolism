@@ -62,6 +62,17 @@ Contains checked-in `tools/list` responses used by `run.py` and
 `tests/test_bench.py`. `collect.py` refreshes server snapshots;
 `make_pydantic.py` refreshes its own.
 
+### Check savings regressions
+
+`uv run python bench/run.py --check` compares the exact saved/before ratio
+for each snapshot, both rule levels and all three local tokenizers. It exits
+nonzero on regressions, missing tokenizer coverage or incompatible corpus
+counts, and does not rewrite either report. No remote counting APIs are used.
+To run disconnected, pre-seed both tiktoken vocabularies. The default check
+requires no decrease; use `--max-loss-pp` only for a deliberately agreed
+percentage-point allowance. Regenerate with `uv run python bench/run.py --offline`
+for an intentional baseline change and review the generated diff.
+
 ### Generated results
 
 `run.py` generates `results.json` and `RESULTS.md`; rerun it to update them.

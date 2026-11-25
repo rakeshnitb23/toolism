@@ -157,6 +157,21 @@ uv run toolism rules -f markdown -o docs/rules.md   # a test fails if this is st
 Then add a line under `## [Unreleased]` in `CHANGELOG.md`, and if the rule saves tokens on the
 corpus, rerun `uv run python bench/run.py` and commit `bench/RESULTS.md` and `results.json`.
 
+### Benchmark savings regressions
+
+Run `uv run python bench/run.py --check` to compare fresh savings against
+`bench/results.json` for every tool set, rule level and local tokenizer.
+The check ignores remote tokenizers and never writes the baseline. By default
+any loss is reported; an explicitly agreed allowance can be passed with
+`--max-loss-pp` (percentage points of savings, not relative percent).
+The corpus, unslimmed token counts and required tokenizer coverage must match.
+Cache both tiktoken vocabularies before running without network access.
+
+If a deliberate change affects the benchmark, run
+`uv run python bench/run.py --offline`, inspect both generated files and
+commit them with the change. Do not regenerate the baseline just to hide
+an unintended regression.
+
 ## Ideas to work on
 
 Each of these makes a good first issue:

@@ -104,6 +104,13 @@ jobs:
           enable-cache: true
       - run: uv sync --locked --all-extras
       - run: uv run pytest -m slow tests/test_bench.py
+      - name: Cache tiktoken vocabulary
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.TIKTOKEN_CACHE_DIR }}
+          key: tiktoken-${{ runner.os }}-v1
+      - name: Check benchmark savings (local tokenizers)
+        run: uv run python bench/run.py --check
 
   package:
     name: package build
