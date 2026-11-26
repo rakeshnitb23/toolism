@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -292,6 +293,20 @@ def test_slim_output_file_compact_and_quiet(
         "description": "Ping.",
         "inputSchema": {"type": "object"},
     }
+
+
+@pytest.mark.parametrize("options", [(), ("--enable", "SL007")], ids=["default", "stable-order"])
+def test_slim_bedrock_preserves_cache_boundary(runner: CliRunner, options: tuple[str, ...]) -> None:
+    source = FIXTURES / "bedrock_converse.json"
+    result = invoke(runner, "slim", source, *options)
+    assert result.exit_code == 0, result.output
+    expected = json.loads(source.read_text(encoding="utf-8"))
+    tools = expected["toolConfig"]["tools"]
+    schema = tools[0]["toolSpec"]["inputSchema"]["json"]
+    del schema["properties"]["city"]["title"]
+    if options:
+        tools[0], tools[1] = tools[1], tools[0]  # sort forecast before weather inside the prefix
+    assert result.stdout == json.dumps(expected, indent=2, ensure_ascii=False) + "\n"
 
 
 def test_slim_json_report_to_file(runner: CliRunner, bloated: Path, tmp_path: Path) -> None:
@@ -654,8 +669,12 @@ def test_diff_mcp_loader_failure(runner: CliRunner, monkeypatch: pytest.MonkeyPa
 def test_diff_mcp_timeout_requires_a_number(runner: CliRunner) -> None:
     result = invoke(runner, "diff", "--mcp", "must-not-start", "--mcp-timeout", "soon")
     assert result.exit_code == 2
-    assert "soon" in result.stderr
-    assert "valid float" in result.stderr
+    # Typer's wording changed in 0.29 ("'soon' is not a valid float" became "Input should be a
+    # valid number"), so assert only on the parts both versions share.
+    # CI forces colour, and Rich styles the option name separately, so strip ANSI codes first.
+    stderr = re.sub(r"\x1b\[[0-9;]*m", "", result.stderr)
+    assert "Invalid value for '--mcp-timeout'" in stderr
+    assert "valid" in stderr
 
 
 @pytest.mark.parametrize("document", [[], {"tools": [BLOATED["tools"][0]] * 2}])
@@ -1102,7 +1121,9 @@ def test_measure_mcp_config_exits_2_when_no_server_is_measured(
     )
 
 
-@pytest.mark.parametrize("extra", [("tools.json",), ("--mcp", "server")])
+@pytest.mark.parametrize(
+    "extra", [("tools.json",), ("--mcp", "server"), ("--mcp-url", "http://127.0.0.1:1/mcp")]
+)
 def test_measure_mcp_config_rejects_other_inputs_before_starting_anything(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extra: tuple[str, ...]
 ) -> None:
@@ -1110,7 +1131,7 @@ def test_measure_mcp_config_rejects_other_inputs_before_starting_anything(
     config = _config(tmp_path, {"a": {"command": "a"}})
     result = invoke(runner, "measure", "--mcp-config", config, *extra)
     assert result.exit_code == 2
-    assert result.stderr == "error: give only one of SOURCE, --mcp or --mcp-config\n"
+    assert result.stderr == "error: give only one of SOURCE, --mcp, --mcp-url or --mcp-config\n"
     assert started == []
 
 

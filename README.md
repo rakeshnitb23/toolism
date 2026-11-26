@@ -16,13 +16,23 @@ property name, `anyOf` wrappers for optional fields, `default: null`, `$schema` 
 `$defs`. toolism removes exactly that, proves or tests that the result accepts the same tool
 calls, and gives you a CI gate so the cost can't creep back up.
 
-On 14 tool sets (159 tools from 13 popular MCP servers, including the official reference servers,
-GitHub, Playwright, Notion, Context7 and AWS docs, plus one generated Pydantic server), the default safe rules cut tool-definition tokens by
-**37.4% in total, with a median of 11.3% per tool set**: 22% on the official git server, 34% on
+On 15 tool sets (192 tools from 14 popular MCP servers, including the official reference servers,
+GitHub, Playwright, Notion, Context7, Chrome DevTools and AWS docs, plus one generated Pydantic server), the default safe rules cut tool-definition tokens by
+**33.2% in total, with a median of 11.1% per tool set**: 22% on the official git server, 34% on
 a typical Pydantic-typed server, 73% on Notion (which copies the same nine `$defs` into all 24
 tools; 18 of them use none).
 Lean, hand-tuned schemas save almost nothing, and the [benchmark](https://github.com/rakeshnitb23/toolism/blob/master/bench/RESULTS.md) shows those
 too.
+
+## Demo
+
+<p align="center">
+  <a href="https://github.com/rakeshnitb23/toolism/blob/master/.github/assets/toolism-demo.mp4">
+    <img src="https://raw.githubusercontent.com/rakeshnitb23/toolism/master/.github/assets/toolism-demo-poster.jpg" alt="toolism demo video: measure and safely cut the token cost of LLM tool and MCP schemas (click to play)" width="640">
+  </a>
+  <br>
+  <sub>48-second walkthrough, with sound. Click to play.</sub>
+</p>
 
 ## Install
 
@@ -31,6 +41,7 @@ pip install toolism                 # CLI + Python API
 pip install "toolism[verify]"       # + equivalence verification (hypothesis-jsonschema)
 pip install "toolism[mcp]"          # + read tools straight from an MCP server
 pip install "toolism[all]"          # everything, incl. Anthropic's exact token counter
+pip install "toolism[gemini]"       # + Gemini's exact token counter
 ```
 
 Or run it without adding it to a project:
@@ -43,7 +54,8 @@ pipx install "toolism[mcp]"                       # isolated, always-on-PATH ins
 
 ## 30-second tour
 
-**Measure** what your tools cost (OpenAI, Anthropic and MCP JSON are detected automatically):
+**Measure** what your tools cost (OpenAI, Anthropic, MCP and Amazon Bedrock Converse JSON
+are detected automatically):
 
 ```console
 $ toolism measure examples/mcp_tools.json
@@ -77,6 +89,14 @@ Savings by rule
 └───────┴────────────────────────┴────────┴───────┘
 ```
 
+For Bedrock Converse, `converse.json` can contain a request with `toolConfig.tools` or just
+the tool list. toolism slims each schema at `toolSpec.inputSchema.json` and keeps
+`cachePoint` entries in their original positions.
+
+```console
+$ toolism slim converse.json -o converse.slim.json
+```
+
 Point it at a live MCP server instead of a file with `--mcp`:
 
 ```console
@@ -99,6 +119,29 @@ The total counts all the servers' tools as one list, the way the model receives 
 (`url`) and disabled entries are skipped, and a server that fails is listed without stopping the
 rest. It exits 0 when at least one server was measured and 2 when none could be. `env` values
 are passed as written, so `${VAR}` placeholders are not expanded.
+
+For a streamable-HTTP MCP endpoint, use `--mcp-url` on `measure`, `slim` or `check`:
+
+```bash
+toolism measure --mcp-url https://your-server.example/mcp
+toolism slim --mcp-url http://127.0.0.1:8000/mcp -o tools.slim.json
+toolism check --mcp-url http://127.0.0.1:8000/mcp --max-total 10000
+```
+
+Give exactly one input: a file/stdin, `--mcp COMMAND`, or `--mcp-url URL`. The URL must be
+the server's MCP endpoint. Both live loaders initialize a session and list every page of tools;
+they do not execute tools. `--mcp-timeout SECONDS` bounds connection, initialization and listing
+together (default: 60 seconds). HTTP loading requires the `mcp` extra and an SDK with streamable
+HTTP support; upgrade with `pip install --upgrade "toolism[mcp]"` if needed. The HTTP loader
+does not configure OAuth or authentication headers, or the older standalone SSE transport.
+
+Python callers can use `toolism.load_mcp_http(url, timeout=60)`. Inside an event loop:
+
+```python
+from toolism.loaders.mcp import load_mcp_http_async
+
+tools = await load_mcp_http_async(url, timeout=60)
+```
 
 **Preview** what slimming changes, as a unified diff per changed tool:
 
@@ -217,7 +260,7 @@ toolism.dump(result.toolset, "tools.slim.json")  # same format and envelope as t
 In an agent, slim once and send the slim tools with every request:
 
 ```python
-tools = toolism.slim_tools(my_tools)  # same shape back (OpenAI, Anthropic or MCP dicts)
+tools = toolism.slim_tools(my_tools)  # returns tools in the same format
 client.messages.create(model=..., tools=tools, messages=...)
 ```
 
@@ -318,6 +361,7 @@ The hook runs whenever a matching file is staged. Create the baseline once with
 | `tiktoken:o200k_base` (default) | OpenAI models; a good approximation elsewhere |
 | `heuristic` | offline, no dependencies; within ~3% of o200k on the benchmark |
 | `anthropic:<model>` | provider-reported counts from Anthropic's `count_tokens` API (needs `ANTHROPIC_API_KEY`) |
+| `gemini:<model>` | exact counts from Gemini's `count_tokens` API (needs `GEMINI_API_KEY`) |
 
 ### Persistent API count cache
 
@@ -398,8 +442,9 @@ outputs slightly, so if tool-call accuracy matters, compare on your evals. That 
 `--level annotations`.
 
 **Is tiktoken accurate for Claude or Gemini?** Not exactly, which is why reports say
-"approximate". Use `-t anthropic:<model>` for exact Claude counts. Relative savings are stable
-across tokenizers: within about 2 percentage points in the [benchmark](https://github.com/rakeshnitb23/toolism/blob/master/bench/RESULTS.md).
+"approximate". Use `-t anthropic:<model>` for exact Claude counts or `-t gemini:<model>` for
+Gemini. Relative savings are stable across tokenizers: within about 2 percentage points in the
+[benchmark](https://github.com/rakeshnitb23/toolism/blob/master/bench/RESULTS.md).
 
 **Which tool fields does toolism count?** It counts a compact, provider-neutral JSON
 rendering of each function tool's `name`, optional `description`, and input schema (rendered as

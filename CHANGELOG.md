@@ -8,6 +8,11 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Streamable-HTTP MCP loading with `--mcp-url URL` on `measure`, `slim` and `check`,
+  plus `load_mcp_http` and its async variant. Includes bounded pagination, the shared
+  MCP timeout and connection-error hints; live and file inputs are mutually exclusive.
+- Amazon Bedrock Converse support for full requests and bare tool lists. `toolism slim`
+  rewrites `toolSpec.inputSchema.json` and preserves `cachePoint` entries (#142).
 - `toolism rules RULE`: show a single rule by ID or name, with full details and options.
 - `toolism doctor` reports local versions and optional dependencies for bug reports,
   without network requests or revealing API keys.
@@ -19,6 +24,10 @@ All notable changes to this project are documented here. The format follows
   remote and disabled entries are skipped. Failure reasons leave out the server's command line
   and mask `env` and argument values. JSON output uses the new `measure_sources` report kind.
   (#141)
+- `gemini:<model>` tokenizer: exact counts from Gemini's `count_tokens` API, installed with
+  `pip install "toolism[gemini]"` (Python 3.11+, `google-genai` 3.0.0 or newer) and needing
+  `GEMINI_API_KEY` or `GOOGLE_API_KEY`. Schemas are sent as full JSON Schema, so `$defs` and
+  `$ref` work (#28).
 
 ### Changed
 

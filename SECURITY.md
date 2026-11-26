@@ -19,6 +19,9 @@ Only the latest release receives security fixes.
 - **`--mcp COMMAND` runs that command**, exactly like typing it in your shell. The server process
   inherits your environment, overlaid with anything you pass. Only point `--mcp` at servers you
   would run anyway.
+- **`--mcp-url URL` connects to that HTTP endpoint** to initialize an MCP session and list
+  tools. It does not execute tools or configure OAuth/authentication headers. Use an endpoint
+  you intend to contact; remote definitions are handled as data, like tool definition files.
 - **`--mcp-config FILE` starts every stdio server listed in that file**, each the way `--mcp`
   would, with that entry's `command`, `args` and `env` added to your environment. Only point it
   at a config whose servers you would run anyway. toolism never prints `env` values: a failing
@@ -28,6 +31,6 @@ Only the latest release receives security fixes.
 - **`anthropic:<model>` tokenization** sends the tool definitions to Anthropic's `count_tokens`
   API using your `ANTHROPIC_API_KEY`. The `heuristic` and `tiktoken:*` tokenizers count locally;
   tiktoken downloads its vocabulary file once on first use (set `TIKTOKEN_CACHE_DIR` to control
-  where it is cached). For no network access at all, use `-t heuristic`.
+  where it is cached). For no network access at all, use a file/stdin input with `-t heuristic`.
 - **The GitHub Action** passes its inputs to the CLI through environment variables, never by
   interpolating them into a shell script, and needs no write permissions.

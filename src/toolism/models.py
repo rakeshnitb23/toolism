@@ -29,6 +29,8 @@ class ToolFormat(str, Enum):
     """Messages API: ``{name, description, input_schema}``."""
     MCP = "mcp"
     """MCP ``tools/list``: ``{name, description, inputSchema, ...}``."""
+    BEDROCK = "bedrock"
+    """Bedrock Converse: ``{toolSpec: {name, description, inputSchema: {json: ...}}}``."""
 
     def __str__(self) -> str:
         return self.value
